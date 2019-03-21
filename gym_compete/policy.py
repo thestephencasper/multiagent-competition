@@ -1,5 +1,6 @@
 """Abstract policy class and some concrete implementations."""
 
+from abc import ABC, abstractmethod
 import copy
 
 from gym.spaces import Box
@@ -153,12 +154,14 @@ class LSTMPolicy(BasePolicy):
             if self.normalized:
                 obz = tf.clip_by_value((self.observation_ph - self.ob_rms.mean) / self.ob_rms.std, -5.0, 5.0)
 
-            last_out = obz
-            for hidden in hiddens[:-1]:
-                last_out = tf.contrib.layers.fully_connected(last_out, hidden)
+            self.fc_out = []
             self.zero_state = []
             self.state_in_ph = []
             self.state_out = []
+            last_out = obz
+            for hidden in hiddens[:-1]:
+                self.fcv_last_out = tf.contrib.layers.fully_connected(last_out, hidden)
+            self.fc_out.append(self.fcv_last_out)
             cell = tf.contrib.rnn.BasicLSTMCell(hiddens[-1], reuse=reuse)
             size = cell.state_size
             self.zero_state.append(np.zeros(size.c, dtype=np.float32))
@@ -166,17 +169,19 @@ class LSTMPolicy(BasePolicy):
             self.state_in_ph.append(tf.placeholder(tf.float32, [None, size.c], name="lstmv_c"))
             self.state_in_ph.append(tf.placeholder(tf.float32, [None, size.h], name="lstmv_h"))
             initial_state = tf.contrib.rnn.LSTMStateTuple(self.state_in_ph[-2], self.state_in_ph[-1])
-            last_out, state_out = tf.nn.dynamic_rnn(cell, last_out, initial_state=initial_state, scope="lstmv")
-            self.state_out.append(state_out)
+            self.lstmv_last_out, self.lstmv_state_out = tf.nn.dynamic_rnn(
+                cell, self.fcv_last_out, initial_state=initial_state, scope="lstmv")
+            self.state_out.append(self.lstmv_state_out)
 
-            self.vpredz = tf.contrib.layers.fully_connected(last_out, 1, activation_fn=None)[:, :, 0]
+            self.vpredz = tf.contrib.layers.fully_connected(self.lstmv_last_out, 1, activation_fn=None)[:, :, 0]
             self.vpred = self.vpredz
             if self.normalized and self.normalized != 'ob':
                 self.vpred = self.vpredz * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
 
             last_out = obz
             for hidden in hiddens[:-1]:
-                last_out = tf.contrib.layers.fully_connected(last_out, hidden)
+                self.fcp_last_out = tf.contrib.layers.fully_connected(last_out, hidden)
+            self.fc_out.append(self.fcp_last_out)
             cell = tf.contrib.rnn.BasicLSTMCell(hiddens[-1], reuse=reuse)
             size = cell.state_size
             self.zero_state.append(np.zeros(size.c, dtype=np.float32))
@@ -184,10 +189,11 @@ class LSTMPolicy(BasePolicy):
             self.state_in_ph.append(tf.placeholder(tf.float32, [None, size.c], name="lstmp_c"))
             self.state_in_ph.append(tf.placeholder(tf.float32, [None, size.h], name="lstmp_h"))
             initial_state = tf.contrib.rnn.LSTMStateTuple(self.state_in_ph[-2], self.state_in_ph[-1])
-            last_out, state_out = tf.nn.dynamic_rnn(cell, last_out, initial_state=initial_state, scope="lstmp")
-            self.state_out.append(state_out)
+            self.lstmp_last_out, self.lstmp_state_out = tf.nn.dynamic_rnn(
+                cell, self.fcp_last_out, initial_state=initial_state, scope="lstmp")
+            self.state_out.append(self.lstmp_state_out)
 
-            mean = tf.contrib.layers.fully_connected(last_out, ac_space.shape[0], activation_fn=None)
+            mean = tf.contrib.layers.fully_connected(self.lstmp_last_out, ac_space.shape[0], activation_fn=None)
             logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]], initializer=tf.zeros_initializer())
 
             self.pd = DiagonalGaussian(mean, logstd)
@@ -228,3 +234,57 @@ class LSTMPolicy(BasePolicy):
 
     def get_trainable_variables(self):
         return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
+
+
+TRANSPARENCY_KEYS = ('obs', 'fc', 'hid')
+
+
+class TransparentPolicy(ABC):
+    @abstractmethod
+    def get_obs_aug_amount(self):
+        raise NotImplementedError()
+
+
+class TransparentLSTMPolicy(TransparentPolicy, LSTMPolicy):
+    """LSTMPolicy which also gives information about itself as outputs."""
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens,
+                 transparent_params, scope="input", reuse=False, normalize=False):
+        """
+        :param transparent_params: dict with potential keys 'obs', 'fc', 'hid'.
+        If key is not present, then we don't provide this data as part of the data dict in step.
+        If key is present, value (bool) corresponds to whether we augment the observation space with it.
+        This is because TransparentCurryVecEnv needs this information to modify its observation space,
+        and we would like to keep all of the transparency-related parameters in one dictionary.
+        """
+        LSTMPolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens,
+                            scope, reuse, normalize)
+        self.hiddens = hiddens
+        self.transparent_params = transparent_params
+
+    def get_obs_aug_amount(self):
+        obs_aug_amount = 0
+        obs_sizes = (self.ob_space.shape[0], self.hiddens[-2], self.hiddens[-1])
+        for key, val in zip(TRANSPARENCY_KEYS, obs_sizes):
+            if self.transparent_params.get(key):
+                obs_aug_amount += val
+        return obs_aug_amount
+
+    def step(self, obs, state=None, mask=None, deterministic=False):
+        outputs = [self.sampled_action, self.vpred, self.state_out, self.fc_out]
+        a, v, s, fc = self.sess.run(outputs, {
+            self.observation_ph: obs[:, None],
+            self.state_in_ph: list(state),
+            self.stochastic_ph: not deterministic})
+        state = []
+        for x in s:
+            state.append(x.c)
+            state.append(x.h)
+        state = np.array(state)
+        for i, d in enumerate(mask):
+            if d:
+                state[:, i, :] = self.zero_state
+
+        transparent_objs = (obs, fc[:, -1, :], state[:, -1, :])
+        transparency_dict = {k: v for k, v in zip(TRANSPARENCY_KEYS, transparent_objs)
+                             if k in self.transparent_params}
+        return a[:, 0, :], v[:, 0], state, None, transparency_dict
