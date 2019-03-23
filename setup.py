@@ -6,13 +6,13 @@ def read_requirements_file(filename):
     with open(req_file_path) as f:
         return [line.strip() for line in f]
 
-setup(name='gym_compete',
+setup(name='gym_compete_old',
       author='Trapit Bansal et al, with modifications by Adam Gleave',
       version='0.0.1',
       url='https://github.com/HumanCompatibleAI/multiagent-competition',
       python_requires='>=3.6.0',
       packages=find_packages(exclude=('tests',)),
-      package_data={'gym_compete':
+      package_data={'gym_compete_old':
         [
           'new_envs/assets/*.xml',
           'agent_zoo/*/*.pkl',

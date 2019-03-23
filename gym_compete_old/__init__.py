@@ -3,7 +3,7 @@ import os
 
 register(
     id='multicomp/RunToGoalAnts-v0',
-    entry_point='gym_compete.new_envs:MultiAgentEnv',
+    entry_point='gym_compete_old.new_envs:MultiAgentEnv',
     kwargs={'agent_names': ['ant', 'ant'],
             'scene_xml_path': os.path.join(
                 os.path.dirname(__file__),
@@ -16,7 +16,7 @@ register(
 
 register(
     id='multicomp/RunToGoalHumans-v0',
-    entry_point='gym_compete.new_envs:MultiAgentEnv',
+    entry_point='gym_compete_old.new_envs:MultiAgentEnv',
     kwargs={'agent_names': ['humanoid', 'humanoid'],
             'scene_xml_path': os.path.join(
                 os.path.dirname(__file__), "new_envs",
@@ -29,7 +29,7 @@ register(
 
 register(
     id='multicomp/YouShallNotPassHumans-v0',
-    entry_point='gym_compete.new_envs:HumansBlockingEnv',
+    entry_point='gym_compete_old.new_envs:HumansBlockingEnv',
     kwargs={'agent_names': ['humanoid_blocker', 'humanoid'],
             'scene_xml_path': os.path.join(
                 os.path.dirname(__file__), "new_envs",
@@ -43,7 +43,7 @@ register(
 
 register(
     id='multicomp/SumoHumans-v0',
-    entry_point='gym_compete.new_envs:SumoEnv',
+    entry_point='gym_compete_old.new_envs:SumoEnv',
     kwargs={'agent_names': ['humanoid_fighter', 'humanoid_fighter'],
             'scene_xml_path': os.path.join(
                 os.path.dirname(__file__), "new_envs",
@@ -59,7 +59,7 @@ register(
 
 register(
     id='multicomp/SumoAnts-v0',
-    entry_point='gym_compete.new_envs:SumoEnv',
+    entry_point='gym_compete_old.new_envs:SumoEnv',
     kwargs={'agent_names': ['ant_fighter', 'ant_fighter'],
             'scene_xml_path': os.path.join(
                 os.path.dirname(__file__), "new_envs",
@@ -79,7 +79,7 @@ register(
 
 # register(
 #     id='multicomp/HumanAntArena-v0',
-#     entry_point='gym_compete.new_envs:HumansKnockoutEnv',
+#     entry_point='gym_compete_old.new_envs:HumansKnockoutEnv',
 #     kwargs={'agent_names': ['ant_fighter', 'humanoid_fighter'],
 #             'scene_xml_path': os.path.join(
 #                 os.path.dirname(__file__), "new_envs",
@@ -99,7 +99,7 @@ register(
 
 register(
     id='multicomp/KickAndDefend-v0',
-    entry_point='gym_compete.new_envs:KickAndDefend',
+    entry_point='gym_compete_old.new_envs:KickAndDefend',
     kwargs={'agent_names': ['humanoid_kicker', 'humanoid_goalkeeper'], # ['humanoid_goalkeeper', 'humanoid_kicker']
             'scene_xml_path': os.path.join(
                 os.path.dirname(__file__), "new_envs",
