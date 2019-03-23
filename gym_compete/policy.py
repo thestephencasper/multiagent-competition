@@ -90,10 +90,12 @@ class GymCompetePolicy(ActorCriticPolicy):
 
 
 class MlpPolicyValue(GymCompetePolicy):
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens, scope="input",
-                 reuse=False, normalize=False):
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=None,
+                 scope="input", reuse=False, normalize=False):
         super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
                          reuse=reuse, normalize=normalize)
+        if hiddens is None:
+            hiddens = [64, 64]
         self.initial_state = None
         with self.sess.graph.as_default():
             with tf.variable_scope(scope, reuse=reuse):
@@ -150,12 +152,14 @@ class MlpPolicyValue(GymCompetePolicy):
 
 
 class LSTMPolicy(GymCompetePolicy, LstmPolicy):
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens, scope="input",
-                 reuse=False, normalize=False):
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=None,
+                 scope="input", reuse=False, normalize=False):
         LstmPolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
                             reuse=reuse, feature_extraction="mlp")
         GymCompetePolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
                                   reuse=reuse, normalize=normalize)
+        if hiddens is None:
+            hiddens = [128, 128]
         with self.sess.graph.as_default():
             with tf.variable_scope('gym_compete/' + scope, reuse=reuse):
                 self.scope = tf.get_variable_scope().name
