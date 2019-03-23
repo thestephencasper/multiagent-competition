@@ -6,7 +6,7 @@ from gym.spaces import Box
 import numpy as np
 from stable_baselines.a2c.utils import seq_to_batch
 from stable_baselines.common.distributions import DiagGaussianProbabilityDistribution
-from stable_baselines.common.policies import ActorCriticPolicy
+from stable_baselines.common.policies import ActorCriticPolicy, LstmPolicy
 import tensorflow as tf
 
 
@@ -57,8 +57,8 @@ def switch(condition, if_exp, else_exp):
 class GymCompetePolicy(ActorCriticPolicy):
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
                  reuse=False, normalize=False):
-        super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                         reuse=reuse, scale=False)
+        ActorCriticPolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
+                                   reuse=reuse, scale=False)
         self.normalized = normalize
 
     def restore(self, params):
@@ -147,13 +147,15 @@ class MlpPolicyValue(GymCompetePolicy):
         return value
 
 
-class LSTMPolicy(GymCompetePolicy):
+class LSTMPolicy(GymCompetePolicy, LstmPolicy):
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens, scope="input",
                  reuse=False, normalize=False):
-        super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                         reuse=reuse, normalize=normalize)
+        LstmPolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
+                            reuse=reuse, feature_extraction="mlp")
+        GymCompetePolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
+                                  reuse=reuse, normalize=normalize)
         with self.sess.graph.as_default():
-            with tf.variable_scope(scope, reuse=reuse):
+            with tf.variable_scope('gym_compete/' + scope, reuse=reuse):
                 self.scope = tf.get_variable_scope().name
 
                 assert isinstance(ob_space, Box)
