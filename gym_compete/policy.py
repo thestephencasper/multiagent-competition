@@ -13,21 +13,28 @@ import tensorflow as tf
 class RunningMeanStd(object):
     def __init__(self, scope="running", reuse=False, epsilon=1e-2, shape=()):
         with tf.variable_scope(scope, reuse=reuse):
-            self._sum = tf.get_variable(
+            # We need these variables to be serialized/deserialized.
+            # Stable Baselines reasonably assumes only trainable variables need to be serialized.
+            # However, we do not want the optimizer to update these. In principle, we should
+            # update these based on observation history. However, Bansal et al's open-source code
+            # did not include support for this, and since they are unlikely to change much with
+            # additional training I have not added support for this.
+            # Hack: make them trainable, but use stop_gradients to stop them from being updated.
+            self._sum = tf.stop_gradient(tf.get_variable(
                 dtype=tf.float32,
                 shape=shape,
                 initializer=tf.constant_initializer(0.0),
-                name="sum", trainable=False)
-            self._sumsq = tf.get_variable(
+                name="sum", trainable=True))
+            self._sumsq = tf.stop_gradient(tf.get_variable(
                 dtype=tf.float32,
                 shape=shape,
                 initializer=tf.constant_initializer(epsilon),
-                name="sumsq", trainable=False)
-            self._count = tf.get_variable(
+                name="sumsq", trainable=True))
+            self._count = tf.stop_gradient(tf.get_variable(
                 dtype=tf.float32,
                 shape=(),
                 initializer=tf.constant_initializer(epsilon),
-                name="count", trainable=False)
+                name="count", trainable=True))
             self.shape = shape
 
             self.mean = tf.to_float(self._sum / self._count)
@@ -63,7 +70,7 @@ class GymCompetePolicy(ActorCriticPolicy):
 
     def restore(self, params):
         with self.sess.graph.as_default():
-            var_list = self.get_serializable_variables()
+            var_list = self.get_trainable_variables()
             shapes = list(map(lambda x: x.get_shape().as_list(), var_list))
             total_size = np.sum([int(np.prod(shape)) for shape in shapes])
             theta = tf.placeholder(tf.float32, [total_size])
@@ -77,11 +84,6 @@ class GymCompetePolicy(ActorCriticPolicy):
 
             op = tf.group(*assigns)
             self.sess.run(op, {theta: params})
-
-    def get_serializable_variables(self):
-        vars = self.sess.graph.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.scope)
-        vars = [x for x in vars if 'Adam' not in x.name]
-        return vars
 
     def get_trainable_variables(self):
         return self.sess.graph.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
