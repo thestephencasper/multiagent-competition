@@ -4,7 +4,7 @@ import copy
 
 from gym.spaces import Box
 import numpy as np
-from stable_baselines.common.policies import BasePolicy
+from stable_baselines.common.policies import ActorCriticPolicy
 import tensorflow as tf
 
 
@@ -65,12 +65,35 @@ class DiagonalGaussian(object):
         return self.mean
 
 
-class MlpPolicyValue(BasePolicy):
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens, scope="input",
+class GymCompetePolicy(ActorCriticPolicy):
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
                  reuse=False, normalize=False):
         super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
                          reuse=reuse, scale=False)
         self.normalized = normalize
+
+    def restore(self, params):
+        var_list = self.get_variables()
+        shapes = list(map(lambda x: x.get_shape().as_list(), var_list))
+        total_size = np.sum([int(np.prod(shape)) for shape in shapes])
+        theta = tf.placeholder(tf.float32, [total_size])
+
+        start = 0
+        assigns = []
+        for (shape, v) in zip(shapes, var_list):
+            size = int(np.prod(shape))
+            assigns.append(tf.assign(v, tf.reshape(theta[start:start + size], shape)))
+            start += size
+
+        op = tf.group(*assigns)
+        self.sess.run(op, {theta: params})
+
+
+class MlpPolicyValue(GymCompetePolicy):
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens, scope="input",
+                 reuse=False, normalize=False):
+        super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
+                         reuse=reuse, normalize=normalize)
         self.initial_state = None
         with tf.variable_scope(scope, reuse=reuse):
             self.scope = tf.get_variable_scope().name
@@ -128,13 +151,12 @@ class MlpPolicyValue(BasePolicy):
         return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
 
 
-class LSTMPolicy(BasePolicy):
+class LSTMPolicy(GymCompetePolicy):
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens, scope="input",
                  reuse=False, normalize=False):
         super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                         reuse=reuse, scale=False)
+                         reuse=reuse, normalize=normalize)
         assert n_steps == 1
-        self.normalized = normalize
         with tf.variable_scope(scope, reuse=reuse):
             self.scope = tf.get_variable_scope().name
 
