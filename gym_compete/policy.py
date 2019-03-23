@@ -6,7 +6,7 @@ from gym.spaces import Box
 import numpy as np
 from stable_baselines.a2c.utils import seq_to_batch
 from stable_baselines.common.distributions import DiagGaussianProbabilityDistribution
-from stable_baselines.common.policies import ActorCriticPolicy, LstmPolicy
+from stable_baselines.common.policies import ActorCriticPolicy, LstmPolicy, register_policy
 import tensorflow as tf
 
 
@@ -290,3 +290,6 @@ class LSTMPolicy(GymCompetePolicy, LstmPolicy):
     def value(self, obs, state=None, mask=None):
         return self.sess.run(self._value, self._make_feed_dict(obs, state, mask))
 
+
+register_policy('BansalMlpPolicy', MlpPolicyValue)
+register_policy('BansalLstmPolicy', LSTMPolicy)
