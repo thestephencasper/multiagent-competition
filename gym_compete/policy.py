@@ -52,21 +52,32 @@ def dense(x, size, name, weight_init=None, bias=True):
         return ret
 
 
-def switch(condition, if_exp, else_exp):
-    x_shape = copy.copy(if_exp.get_shape())
-    x = tf.cond(tf.cast(condition, 'bool'),
-                lambda: if_exp,
-                lambda: else_exp)
-    x.set_shape(x_shape)
-    return x
-
-
 class GymCompetePolicy(ActorCriticPolicy):
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, scope="input",
                  reuse=False, normalize=False):
-        ActorCriticPolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                                   reuse=reuse, scale=False)
+        super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
+                         reuse=reuse, scale=False)
         self.normalized = normalize
+
+        with self.sess.graph.as_default():
+            with tf.variable_scope(scope, reuse=reuse):
+                self.scope = tf.get_variable_scope().name
+
+                assert isinstance(ob_space, Box)
+
+                if self.normalized:
+                    if self.normalized != 'ob':
+                        self.ret_rms = RunningMeanStd(scope="retfilter")
+                    self.ob_rms = RunningMeanStd(shape=ob_space.shape, scope="obsfilter")
+
+                self.obz = self.processed_obs
+                if self.normalized:
+                    self.obz = tf.clip_by_value((self.processed_obs - self.ob_rms.mean) / self.ob_rms.std, -5.0, 5.0)
+
+    def _setup_init(self):
+        pdparam = tf.concat([self.policy, self.policy * 0.0 + self.logstd], axis=1)
+        self.proba_distribution = DiagGaussianProbabilityDistribution(pdparam)
+        super()._setup_init()
 
     def restore(self, params):
         with self.sess.graph.as_default():
@@ -93,55 +104,36 @@ class MlpPolicyValue(GymCompetePolicy):
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=None,
                  scope="input", reuse=False, normalize=False):
         super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                         reuse=reuse, normalize=normalize)
+                         scope=scope, reuse=reuse, normalize=normalize)
+
         if hiddens is None:
             hiddens = [64, 64]
         self.initial_state = None
+
         with self.sess.graph.as_default():
             with tf.variable_scope(scope, reuse=reuse):
-                self.scope = tf.get_variable_scope().name
+                def dense_net(prefix, shape):
+                    last_out = self.obz
+                    for i, hid_size in enumerate(hiddens):
+                        h = dense(last_out, hid_size, f'{prefix}{i + 1}')
+                        last_out = tf.nn.tanh(h)
+                    return dense(last_out, shape, f'{prefix}final')
 
-                assert isinstance(ob_space, Box)
-
-                self.stochastic_ph = tf.placeholder(tf.bool, (), name="stochastic")
-
-                if self.normalized:
-                    if self.normalized != 'ob':
-                        self.ret_rms = RunningMeanStd(scope="retfilter")
-                    self.ob_rms = RunningMeanStd(shape=ob_space.shape, scope="obsfilter")
-
-                obz = self.processed_obs
-                if self.normalized:
-                    obz = tf.clip_by_value((self.processed_obs - self.ob_rms.mean) / self.ob_rms.std, -5.0, 5.0)
-
-                last_out = obz
-                for i, hid_size in enumerate(hiddens):
-                    last_out = tf.nn.tanh(dense(last_out, hid_size, "vffc%i" % (i + 1)))
-                self.value_fn = dense(last_out, 1, "vffinal")
+                self.value_fn = dense_net('vff', 1)
                 if self.normalized and self.normalized != 'ob':
                     self.value_fn = self.value_fn * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
 
-                last_out = obz
-                for i, hid_size in enumerate(hiddens):
-                    last_out = tf.nn.tanh(dense(last_out, hid_size, "polfc%i" % (i + 1)))
-                mean = dense(last_out, ac_space.shape[0], "polfinal")
-                logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]], initializer=tf.zeros_initializer())
+                self.policy = dense_net('pol', ac_space.shape[0])
+                self.logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]],
+                                              initializer=tf.zeros_initializer())
 
-                pdparam = tf.concat([mean, mean * 0.0 + logstd], axis=1)
-                self.proba_distribution = DiagGaussianProbabilityDistribution(pdparam)
-                self.sampled_action = switch(self.stochastic_ph,
-                                             self.proba_distribution.sample(),
-                                             self.proba_distribution.mode())
-                self.policy = mean
                 self._setup_init()
 
     def step(self, obs, state=None, mask=None, deterministic=False):
-        outputs = [self.sampled_action, self._value, self.neglogp]
-        a, v, neglogp = self.sess.run(outputs, {
-            self.obs_ph: obs,
-            self.stochastic_ph: not deterministic,
-        })
-        return a, v, None, neglogp
+        action = self.deterministic_action if deterministic else self.action
+        outputs = [action, self._value, self.neglogp]
+        a, v, neglogp = self.sess.run(outputs, {self.obs_ph: obs})
+        return a, v, self.initial_state, neglogp
 
     def proba_step(self, obs, state=None, mask=None):
         return self.sess.run(self.policy_proba, {self.obs_ph: obs})
@@ -151,44 +143,27 @@ class MlpPolicyValue(GymCompetePolicy):
         return value
 
 
-class LSTMPolicy(GymCompetePolicy, LstmPolicy):
+class LSTMPolicy(GymCompetePolicy):
+    recurrent = True
+
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=None,
                  scope="input", reuse=False, normalize=False):
-        LstmPolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                            reuse=reuse, feature_extraction="mlp")
-        GymCompetePolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                                  reuse=reuse, normalize=normalize)
+        super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
+                         scope=scope, reuse=reuse, normalize=normalize)
         if hiddens is None:
             hiddens = [128, 128]
         with self.sess.graph.as_default():
-            with tf.variable_scope('gym_compete/' + scope, reuse=reuse):
-                self.scope = tf.get_variable_scope().name
-
-                assert isinstance(ob_space, Box)
-
-                self.stochastic_ph = tf.placeholder(tf.bool, (), name="stochastic")
-                # We don't use masks_ph, but Stable Baselines needs it to exist
-                self.masks_ph = tf.placeholder(dtype=tf.float32, shape=[n_batch], name="masks")
-
-                # Observation Normalization
-                if self.normalized:
-                    if self.normalized != 'ob':
-                        self.ret_rms = RunningMeanStd(scope="retfilter")
-                    self.ob_rms = RunningMeanStd(shape=ob_space.shape, scope="obsfilter")
-
-                obz = self.obs_ph
-                if self.normalized:
-                    obz = tf.clip_by_value((self.obs_ph - self.ob_rms.mean) / self.ob_rms.std, -5.0, 5.0)
-
+            with tf.variable_scope(scope, reuse=reuse):
                 num_lstm = hiddens[-1]
                 self.states_ph = tf.placeholder(tf.float32, [self.n_env, 4, num_lstm], name="lstmpv_ch")
+                self.masks_ph = tf.placeholder(dtype=tf.float32, shape=[n_batch], name="masks")
                 self.state_out = []
                 states = tf.transpose(self.states_ph, (1, 0, 2))
                 self.zero_state = np.zeros((4, num_lstm), dtype=np.float32)
 
                 def lstm(start, suffix):
                     # Feed forward
-                    ff_out = obz
+                    ff_out = self.obz
                     for hidden in hiddens[:-1]:
                         ff_out = tf.contrib.layers.fully_connected(ff_out, hidden)
 
@@ -247,15 +222,8 @@ class LSTMPolicy(GymCompetePolicy, LstmPolicy):
                 logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]],
                                          initializer=tf.zeros_initializer())
 
-                mean = tf.reshape(mean, [n_batch] + list(ac_space.shape))
-                logstd = tf.reshape(logstd, ac_space.shape)
-
-                pdparam = tf.concat([mean, mean * 0.0 + logstd], axis=1)
-                self.proba_distribution = DiagGaussianProbabilityDistribution(pdparam)
-                self.sampled_action = switch(self.stochastic_ph,
-                                             self.proba_distribution.sample(),
-                                             self.proba_distribution.mode())
-                self.policy = mean
+                self.policy = tf.reshape(mean, [n_batch] + list(ac_space.shape))
+                self.logstd = tf.reshape(logstd, ac_space.shape)
 
                 self.initial_state = np.tile(self.zero_state, (self.n_env, 1, 1))
 
@@ -272,9 +240,9 @@ class LSTMPolicy(GymCompetePolicy, LstmPolicy):
         }
 
     def step(self, obs, state=None, mask=None, deterministic=False):
-        outputs = [self.sampled_action, self._value, self.state_out, self.neglogp]
+        action = self.deterministic_action if deterministic else self.action
+        outputs = [action, self._value, self.state_out, self.neglogp]
         feed_dict = self._make_feed_dict(obs, state, mask)
-        feed_dict[self.stochastic_ph] = not deterministic
         a, v, s, neglogp = self.sess.run(outputs, feed_dict)
         state = []
         for x in s:
