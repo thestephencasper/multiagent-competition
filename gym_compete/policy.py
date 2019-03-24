@@ -4,7 +4,7 @@ import copy
 
 from gym.spaces import Box
 import numpy as np
-from stable_baselines.a2c.utils import seq_to_batch
+from stable_baselines.a2c.utils import ortho_init, seq_to_batch
 from stable_baselines.common.distributions import DiagGaussianProbabilityDistribution
 from stable_baselines.common.policies import ActorCriticPolicy, LstmPolicy, register_policy
 import tensorflow as tf
@@ -58,6 +58,7 @@ class GymCompetePolicy(ActorCriticPolicy):
         super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
                          reuse=reuse, scale=False)
         self.normalized = normalize
+        self.weight_init = ortho_init(scale=0.01)
 
         with self.sess.graph.as_default():
             with tf.variable_scope(scope, reuse=reuse):
@@ -115,9 +116,11 @@ class MlpPolicyValue(GymCompetePolicy):
                 def dense_net(prefix, shape):
                     last_out = self.obz
                     for i, hid_size in enumerate(hiddens):
-                        h = dense(last_out, hid_size, f'{prefix}{i + 1}')
+                        h = dense(last_out, hid_size, f'{prefix}{i + 1}',
+                                  weight_init=self.weight_init)
                         last_out = tf.nn.tanh(h)
-                    return dense(last_out, shape, f'{prefix}final')
+                    return dense(last_out, shape, f'{prefix}final',
+                                 weight_init=self.weight_init)
 
                 self.value_fn = dense_net('vff', 1)
                 if self.normalized and self.normalized != 'ob':
