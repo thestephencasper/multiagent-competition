@@ -1,32 +1,40 @@
 """Abstract policy class and some concrete implementations."""
 
-from abc import ABC, abstractmethod
 import copy
 
 from gym.spaces import Box
 import numpy as np
-from stable_baselines.common.policies import BasePolicy
+from stable_baselines.a2c.utils import ortho_init, seq_to_batch
+from stable_baselines.common.distributions import DiagGaussianProbabilityDistribution
+from stable_baselines.common.policies import ActorCriticPolicy, LstmPolicy, register_policy
 import tensorflow as tf
 
 
 class RunningMeanStd(object):
     def __init__(self, scope="running", reuse=False, epsilon=1e-2, shape=()):
         with tf.variable_scope(scope, reuse=reuse):
-            self._sum = tf.get_variable(
+            # We need these variables to be serialized/deserialized.
+            # Stable Baselines reasonably assumes only trainable variables need to be serialized.
+            # However, we do not want the optimizer to update these. In principle, we should
+            # update these based on observation history. However, Bansal et al's open-source code
+            # did not include support for this, and since they are unlikely to change much with
+            # additional training I have not added support for this.
+            # Hack: make them trainable, but use stop_gradients to stop them from being updated.
+            self._sum = tf.stop_gradient(tf.get_variable(
                 dtype=tf.float32,
                 shape=shape,
                 initializer=tf.constant_initializer(0.0),
-                name="sum", trainable=False)
-            self._sumsq = tf.get_variable(
+                name="sum", trainable=True))
+            self._sumsq = tf.stop_gradient(tf.get_variable(
                 dtype=tf.float32,
                 shape=shape,
                 initializer=tf.constant_initializer(epsilon),
-                name="sumsq", trainable=False)
-            self._count = tf.get_variable(
+                name="sumsq", trainable=True))
+            self._count = tf.stop_gradient(tf.get_variable(
                 dtype=tf.float32,
                 shape=(),
                 initializer=tf.constant_initializer(epsilon),
-                name="count", trainable=False)
+                name="count", trainable=True))
             self.shape = shape
 
             self.mean = tf.to_float(self._sum / self._count)
@@ -44,193 +52,215 @@ def dense(x, size, name, weight_init=None, bias=True):
         return ret
 
 
-def switch(condition, if_exp, else_exp):
-    x_shape = copy.copy(if_exp.get_shape())
-    x = tf.cond(tf.cast(condition, 'bool'),
-                lambda: if_exp,
-                lambda: else_exp)
-    x.set_shape(x_shape)
-    return x
-
-
-class DiagonalGaussian(object):
-    def __init__(self, mean, logstd):
-        self.mean = mean
-        self.logstd = logstd
-        self.std = tf.exp(logstd)
-
-    def sample(self):
-        return self.mean + self.std * tf.random_normal(tf.shape(self.mean))
-
-    def mode(self):
-        return self.mean
-
-
-class MlpPolicyValue(BasePolicy):
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens, scope="input",
+class GymCompetePolicy(ActorCriticPolicy):
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, scope="input",
                  reuse=False, normalize=False):
         super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
                          reuse=reuse, scale=False)
         self.normalized = normalize
-        self.initial_state = None
-        with tf.variable_scope(scope, reuse=reuse):
-            self.scope = tf.get_variable_scope().name
+        self.weight_init = ortho_init(scale=0.01)
 
-            assert isinstance(ob_space, Box)
+        with self.sess.graph.as_default():
+            with tf.variable_scope(scope, reuse=reuse):
+                self.scope = tf.get_variable_scope().name
 
-            self.stochastic_ph = tf.placeholder(tf.bool, (), name="stochastic")
-            self.taken_action_ph = tf.placeholder(dtype=tf.float32, shape=[None, ac_space.shape[0]], name="taken_action")
+                assert isinstance(ob_space, Box)
 
-            if self.normalized:
-                if self.normalized != 'ob':
-                    self.ret_rms = RunningMeanStd(scope="retfilter")
-                self.ob_rms = RunningMeanStd(shape=ob_space.shape, scope="obsfilter")
+                if self.normalized:
+                    if self.normalized != 'ob':
+                        self.ret_rms = RunningMeanStd(scope="retfilter")
+                    self.ob_rms = RunningMeanStd(shape=ob_space.shape, scope="obsfilter")
 
-            obz = self.processed_obs
-            if self.normalized:
-                obz = tf.clip_by_value((self.processed_obs - self.ob_rms.mean) / self.ob_rms.std, -5.0, 5.0)
+                self.obz = self.processed_obs
+                if self.normalized:
+                    self.obz = tf.clip_by_value((self.processed_obs - self.ob_rms.mean) / self.ob_rms.std, -5.0, 5.0)
 
-            last_out = obz
-            for i, hid_size in enumerate(hiddens):
-                last_out = tf.nn.tanh(dense(last_out, hid_size, "vffc%i" % (i + 1)))
-            self.vpredz = dense(last_out, 1, "vffinal")[:, 0]
+    def _setup_init(self):
+        pdparam = tf.concat([self.policy, self.policy * 0.0 + self.logstd], axis=1)
+        self.proba_distribution = DiagGaussianProbabilityDistribution(pdparam)
+        super()._setup_init()
 
-            self.vpred = self.vpredz
-            if self.normalized and self.normalized != 'ob':
-                self.vpred = self.vpredz * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
+    def restore(self, params):
+        with self.sess.graph.as_default():
+            var_list = self.get_trainable_variables()
+            shapes = list(map(lambda x: x.get_shape().as_list(), var_list))
+            total_size = np.sum([int(np.prod(shape)) for shape in shapes])
+            theta = tf.placeholder(tf.float32, [total_size])
 
-            last_out = obz
-            for i, hid_size in enumerate(hiddens):
-                last_out = tf.nn.tanh(dense(last_out, hid_size, "polfc%i" % (i + 1)))
-            mean = dense(last_out, ac_space.shape[0], "polfinal")
-            logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]], initializer=tf.zeros_initializer())
+            start = 0
+            assigns = []
+            for (shape, v) in zip(shapes, var_list):
+                size = int(np.prod(shape))
+                assigns.append(tf.assign(v, tf.reshape(theta[start:start + size], shape)))
+                start += size
 
-            self.pd = DiagonalGaussian(mean, logstd)
-            self.sampled_action = switch(self.stochastic_ph, self.pd.sample(), self.pd.mode())
-
-    def make_feed_dict(self, observation, taken_action):
-        return {
-            self.obs_ph: observation,
-            self.taken_action_ph: taken_action
-        }
-
-    def step(self, obs, state=None, mask=None, deterministic=False):
-        outputs = [self.sampled_action, self.vpred]
-        a, v = self.sess.run(outputs, {
-            self.obs_ph: obs,
-            self.stochastic_ph: not deterministic,
-        })
-        return a, v, None, None
-
-    def get_variables(self):
-        return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.scope)
+            op = tf.group(*assigns)
+            self.sess.run(op, {theta: params})
 
     def get_trainable_variables(self):
-        return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
+        return self.sess.graph.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
 
 
-class LSTMPolicy(BasePolicy):
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens, scope="input",
-                 reuse=False, normalize=False):
+class MlpPolicyValue(GymCompetePolicy):
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=None,
+                 scope="input", reuse=False, normalize=False):
         super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                         reuse=reuse, scale=False)
-        assert n_steps == 1
-        self.normalized = normalize
-        with tf.variable_scope(scope, reuse=reuse):
-            self.scope = tf.get_variable_scope().name
+                         scope=scope, reuse=reuse, normalize=normalize)
 
-            assert isinstance(ob_space, Box)
+        if hiddens is None:
+            hiddens = [64, 64]
+        self.initial_state = None
 
-            self.observation_ph = tf.placeholder(tf.float32, [None, None] + list(ob_space.shape), name="observation")
-            self.stochastic_ph = tf.placeholder(tf.bool, (), name="stochastic")
-            self.taken_action_ph = tf.placeholder(dtype=tf.float32, shape=[None, None, ac_space.shape[0]], name="taken_action")
+        with self.sess.graph.as_default():
+            with tf.variable_scope(scope, reuse=reuse):
+                def dense_net(prefix, shape):
+                    last_out = self.obz
+                    for i, hid_size in enumerate(hiddens):
+                        h = dense(last_out, hid_size, f'{prefix}{i + 1}',
+                                  weight_init=self.weight_init)
+                        last_out = tf.nn.tanh(h)
+                    return dense(last_out, shape, f'{prefix}final',
+                                 weight_init=self.weight_init)
 
-            if self.normalized:
-                if self.normalized != 'ob':
-                    self.ret_rms = RunningMeanStd(scope="retfilter")
-                self.ob_rms = RunningMeanStd(shape=ob_space.shape, scope="obsfilter")
+                self.value_fn = dense_net('vff', 1)
+                if self.normalized and self.normalized != 'ob':
+                    self.value_fn = self.value_fn * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
 
-            obz = self.observation_ph
-            if self.normalized:
-                obz = tf.clip_by_value((self.observation_ph - self.ob_rms.mean) / self.ob_rms.std, -5.0, 5.0)
+                self.policy = dense_net('pol', ac_space.shape[0])
+                self.logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]],
+                                              initializer=tf.zeros_initializer())
 
-            self.fc_out = []
-            self.zero_state = []
-            self.state_in_ph = []
-            self.state_out = []
-            last_out = obz
-            for hidden in hiddens[:-1]:
-                self.fcv_last_out = tf.contrib.layers.fully_connected(last_out, hidden)
-            self.fc_out.append(self.fcv_last_out)
-            cell = tf.contrib.rnn.BasicLSTMCell(hiddens[-1], reuse=reuse)
-            size = cell.state_size
-            self.zero_state.append(np.zeros(size.c, dtype=np.float32))
-            self.zero_state.append(np.zeros(size.h, dtype=np.float32))
-            self.state_in_ph.append(tf.placeholder(tf.float32, [None, size.c], name="lstmv_c"))
-            self.state_in_ph.append(tf.placeholder(tf.float32, [None, size.h], name="lstmv_h"))
-            initial_state = tf.contrib.rnn.LSTMStateTuple(self.state_in_ph[-2], self.state_in_ph[-1])
-            self.lstmv_last_out, self.lstmv_state_out = tf.nn.dynamic_rnn(
-                cell, self.fcv_last_out, initial_state=initial_state, scope="lstmv")
-            self.state_out.append(self.lstmv_state_out)
+                self._setup_init()
 
-            self.vpredz = tf.contrib.layers.fully_connected(self.lstmv_last_out, 1, activation_fn=None)[:, :, 0]
-            self.vpred = self.vpredz
-            if self.normalized and self.normalized != 'ob':
-                self.vpred = self.vpredz * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
+    def step(self, obs, state=None, mask=None, deterministic=False):
+        action = self.deterministic_action if deterministic else self.action
+        outputs = [action, self._value, self.neglogp]
+        a, v, neglogp = self.sess.run(outputs, {self.obs_ph: obs})
+        return a, v, self.initial_state, neglogp
 
-            last_out = obz
-            for hidden in hiddens[:-1]:
-                self.fcp_last_out = tf.contrib.layers.fully_connected(last_out, hidden)
-            self.fc_out.append(self.fcp_last_out)
-            cell = tf.contrib.rnn.BasicLSTMCell(hiddens[-1], reuse=reuse)
-            size = cell.state_size
-            self.zero_state.append(np.zeros(size.c, dtype=np.float32))
-            self.zero_state.append(np.zeros(size.h, dtype=np.float32))
-            self.state_in_ph.append(tf.placeholder(tf.float32, [None, size.c], name="lstmp_c"))
-            self.state_in_ph.append(tf.placeholder(tf.float32, [None, size.h], name="lstmp_h"))
-            initial_state = tf.contrib.rnn.LSTMStateTuple(self.state_in_ph[-2], self.state_in_ph[-1])
-            self.lstmp_last_out, self.lstmp_state_out = tf.nn.dynamic_rnn(
-                cell, self.fcp_last_out, initial_state=initial_state, scope="lstmp")
-            self.state_out.append(self.lstmp_state_out)
+    def proba_step(self, obs, state=None, mask=None):
+        return self.sess.run(self.policy_proba, {self.obs_ph: obs})
 
-            mean = tf.contrib.layers.fully_connected(self.lstmp_last_out, ac_space.shape[0], activation_fn=None)
-            logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]], initializer=tf.zeros_initializer())
+    def value(self, obs, state=None, mask=None):
+        value = self.sess.run(self._value, {self.obs_ph: obs})
+        return value
 
-            self.pd = DiagonalGaussian(mean, logstd)
-            self.sampled_action = switch(self.stochastic_ph, self.pd.sample(), self.pd.mode())
 
-            self.zero_state = np.array(self.zero_state)
-            self.initial_state = np.tile(self.zero_state, (n_batch, 1, 1)).swapaxes(0, 1)
-            self.state_in_ph = tuple(self.state_in_ph)
+class LSTMPolicy(GymCompetePolicy):
+    recurrent = True
 
-            for p in self.get_trainable_variables():
-                tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, tf.reduce_sum(tf.square(p)))
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=None,
+                 scope="input", reuse=False, normalize=False):
+        super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
+                         scope=scope, reuse=reuse, normalize=normalize)
+        if hiddens is None:
+            hiddens = [128, 128]
+        with self.sess.graph.as_default():
+            with tf.variable_scope(scope, reuse=reuse):
+                num_lstm = hiddens[-1]
+                self.states_ph = tf.placeholder(tf.float32, [self.n_env, 4, num_lstm], name="lstmpv_ch")
+                self.masks_ph = tf.placeholder(dtype=tf.float32, shape=[n_batch], name="masks")
+                self.state_out = []
+                states = tf.transpose(self.states_ph, (1, 0, 2))
+                self.zero_state = np.zeros((4, num_lstm), dtype=np.float32)
 
-    def make_feed_dict(self, observation, state_in, taken_action):
+                def lstm(start, suffix):
+                    # Feed forward
+                    ff_out = self.obz
+                    for hidden in hiddens[:-1]:
+                        ff_out = tf.contrib.layers.fully_connected(ff_out, hidden)
+
+                    # Batch->Seq
+                    input_seq = tf.reshape(ff_out, [self.n_env, n_steps, -1])
+                    input_seq = tf.transpose(input_seq, (1, 0, 2))
+                    masks = tf.reshape(self.masks_ph, [self.n_env, n_steps, 1])
+
+                    # RNN
+                    inputs_ta = tf.TensorArray(dtype=tf.float32, size=n_steps)
+                    inputs_ta = inputs_ta.unstack(input_seq)
+
+                    cell = tf.contrib.rnn.BasicLSTMCell(num_lstm, reuse=reuse)
+                    initial_state = tf.contrib.rnn.LSTMStateTuple(states[start], states[start + 1])
+
+                    def loop_fn(time, cell_output, cell_state, loop_state):
+                        emit_output = cell_output
+
+                        elements_finished = time >= n_steps
+                        finished = tf.reduce_all(elements_finished)
+
+                        # TODO: use masks
+                        mask = tf.cond(finished,
+                                       lambda: tf.zeros([self.n_env, 1], dtype=tf.float32),
+                                       lambda: masks[:, time, :])
+                        next_cell_state = cell_state or initial_state
+                        next_cell_state = tf.contrib.rnn.LSTMStateTuple(next_cell_state.c * (1 - mask),
+                                                                        next_cell_state.h * (1 - mask))
+
+                        next_input = tf.cond(
+                            finished,
+                            lambda: tf.zeros([self.n_env, ff_out.shape[-1]],
+                                             dtype=tf.float32),
+                            lambda: inputs_ta.read(time))
+                        next_loop_state = None
+                        return (elements_finished, next_input, next_cell_state,
+                                emit_output, next_loop_state)
+
+                    outputs_ta, final_state, _ = tf.nn.raw_rnn(cell, loop_fn,
+                                                               parallel_iterations=1,
+                                                               scope=f'lstm{suffix}')
+                    last_out = outputs_ta.stack()
+                    last_out = seq_to_batch(last_out)
+                    self.state_out.append(final_state)
+
+                    return last_out, input_seq
+
+                value_out, self.value_ff_acts = lstm(0, 'v')
+                self.value_fn = tf.contrib.layers.fully_connected(value_out, 1, activation_fn=None)
+                if self.normalized and self.normalized != 'ob':
+                    self.value_fn = self.value_fn * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
+
+                mean, self.policy_ff_acts = lstm(2, 'p')
+                mean = tf.contrib.layers.fully_connected(mean, ac_space.shape[0],
+                                                         activation_fn=None)
+                logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]],
+                                         initializer=tf.zeros_initializer())
+
+                self.policy = tf.reshape(mean, [n_batch] + list(ac_space.shape))
+                self.logstd = tf.reshape(logstd, ac_space.shape)
+
+                self.initial_state = np.tile(self.zero_state, (self.n_env, 1, 1))
+
+                for p in self.get_trainable_variables():
+                    tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, tf.reduce_sum(tf.square(p)))
+
+                self._setup_init()
+
+    def _make_feed_dict(self, obs, state, mask):
         return {
-            self.observation_ph: observation,
-            self.state_in_ph: list(np.transpose(state_in, (1, 0, 2))),
-            self.taken_action_ph: taken_action
+            self.obs_ph: obs,
+            self.states_ph: state,
+            self.masks_ph: mask,
         }
 
     def step(self, obs, state=None, mask=None, deterministic=False):
-        outputs = [self.sampled_action, self.vpred, self.state_out]
-        a, v, s = self.sess.run(outputs, {
-            self.observation_ph: obs[:, None],
-            self.state_in_ph: list(state),
-            self.stochastic_ph: not deterministic})
+        action = self.deterministic_action if deterministic else self.action
+        outputs = [action, self._value, self.state_out, self.neglogp]
+        feed_dict = self._make_feed_dict(obs, state, mask)
+        a, v, s, neglogp = self.sess.run(outputs, feed_dict)
         state = []
         for x in s:
             state.append(x.c)
             state.append(x.h)
         state = np.array(state)
-        for i, d in enumerate(mask):
-            if d:
-                state[:, i, :] = self.zero_state
-        return a[:, 0, :], v[:, 0], state, None
+        state = np.transpose(state, (1, 0, 2))
+        return a, v, state, neglogp
 
-    def get_variables(self):
-        return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.scope)
+    def proba_step(self, obs, state=None, mask=None):
+        return self.sess.run(self.policy_proba, self._make_feed_dict(obs, state, mask))
 
-    def get_trainable_variables(self):
-        return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
+    def value(self, obs, state=None, mask=None):
+        return self.sess.run(self._value, self._make_feed_dict(obs, state, mask))
+
+
+register_policy('BansalMlpPolicy', MlpPolicyValue)
+register_policy('BansalLstmPolicy', LSTMPolicy)
