@@ -155,9 +155,10 @@ class LSTMPolicy(GymCompetePolicy):
                          scope=scope, reuse=reuse, normalize=normalize)
         if hiddens is None:
             hiddens = [128, 128]
+        self.hiddens = hiddens
         with self.sess.graph.as_default():
             with tf.variable_scope(scope, reuse=reuse):
-                num_lstm = hiddens[-1]
+                num_lstm = self.hiddens[-1]
                 self.states_ph = tf.placeholder(tf.float32, [self.n_env, 4, num_lstm], name="lstmpv_ch")
                 self.masks_ph = tf.placeholder(dtype=tf.float32, shape=[n_batch], name="masks")
                 self.state_out = []
@@ -167,7 +168,7 @@ class LSTMPolicy(GymCompetePolicy):
                 def lstm(start, suffix):
                     # Feed forward
                     ff_out = self.obz
-                    for hidden in hiddens[:-1]:
+                    for hidden in self.hiddens[:-1]:
                         ff_out = tf.contrib.layers.fully_connected(ff_out, hidden)
 
                     # Batch->Seq
