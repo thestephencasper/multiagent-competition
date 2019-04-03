@@ -214,17 +214,18 @@ class LSTMPolicy(GymCompetePolicy):
 
                     return last_out, input_seq
 
-                value_out, self.value_ff_acts = lstm(0, 'v')
+                value_out, value_ff_acts = lstm(0, 'v')
                 self.value_fn = tf.contrib.layers.fully_connected(value_out, 1, activation_fn=None)
                 if self.normalized and self.normalized != 'ob':
                     self.value_fn = self.value_fn * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
 
-                mean, self.policy_ff_acts = lstm(2, 'p')
+                mean, policy_ff_acts = lstm(2, 'p')
                 mean = tf.contrib.layers.fully_connected(mean, ac_space.shape[0],
                                                          activation_fn=None)
                 logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]],
                                          initializer=tf.zeros_initializer())
 
+                self.ff_out = [value_ff_acts, policy_ff_acts]
                 self.policy = tf.reshape(mean, [n_batch] + list(ac_space.shape))
                 self.logstd = tf.reshape(logstd, ac_space.shape)
 
