@@ -110,6 +110,7 @@ class MlpPolicyValue(GymCompetePolicy):
         if hiddens is None:
             hiddens = [64, 64]
         self.initial_state = None
+        self.hiddens = hiddens
 
         with self.sess.graph.as_default():
             with tf.variable_scope(scope, reuse=reuse):
@@ -168,9 +169,11 @@ class LSTMPolicy(GymCompetePolicy):
                 def lstm(start, suffix):
                     # Feed forward
                     ff_out = self.obz
+                    ff_list = []
                     for hidden in self.hiddens[:-1]:
                         ff_out = tf.contrib.layers.fully_connected(ff_out, hidden)
-
+                        batch_ff_out = tf.reshape(ff_out, [self.n_env, n_steps, -1])
+                        ff_list.append(batch_ff_out)
                     # Batch->Seq
                     input_seq = tf.reshape(ff_out, [self.n_env, n_steps, -1])
                     input_seq = tf.transpose(input_seq, (1, 0, 2))
@@ -213,7 +216,7 @@ class LSTMPolicy(GymCompetePolicy):
                     last_out = seq_to_batch(last_out)
                     self.state_out.append(final_state)
 
-                    return last_out, input_seq
+                    return last_out, ff_list
 
                 value_out, value_ff_acts = lstm(0, 'v')
                 self.value_fn = tf.contrib.layers.fully_connected(value_out, 1, activation_fn=None)
@@ -226,7 +229,7 @@ class LSTMPolicy(GymCompetePolicy):
                 logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]],
                                          initializer=tf.zeros_initializer())
 
-                self.ff_out = [value_ff_acts, policy_ff_acts]
+                self.ff_out = {'value': value_ff_acts, 'policy': policy_ff_acts}
                 self.policy = tf.reshape(mean, [n_batch] + list(ac_space.shape))
                 self.logstd = tf.reshape(logstd, ac_space.shape)
 
