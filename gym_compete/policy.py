@@ -6,7 +6,7 @@ from gym.spaces import Box
 import numpy as np
 from stable_baselines.a2c.utils import ortho_init, seq_to_batch
 from stable_baselines.common.distributions import DiagGaussianProbabilityDistribution
-from stable_baselines.common.policies import ActorCriticPolicy, LstmPolicy, register_policy
+from stable_baselines.common.policies import ActorCriticPolicy, StatefulActorCriticPolicy, register_policy
 import tensorflow as tf
 
 
@@ -53,10 +53,10 @@ def dense(x, size, name, weight_init=None, bias=True):
 
 
 class GymCompetePolicy(ActorCriticPolicy):
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, scope="input",
-                 reuse=False, normalize=False):
-        super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                         reuse=reuse, scale=False)
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, state_shape=None,
+                 scope="input", reuse=False, normalize=False):
+        ActorCriticPolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
+                                   reuse=reuse, scale=False)
         self.normalized = normalize
         self.weight_init = ortho_init(scale=0.01)
 
@@ -77,7 +77,7 @@ class GymCompetePolicy(ActorCriticPolicy):
 
     def _setup_init(self):
         pdparam = tf.concat([self.policy, self.policy * 0.0 + self.logstd], axis=1)
-        self.proba_distribution = DiagGaussianProbabilityDistribution(pdparam)
+        self._proba_distribution = DiagGaussianProbabilityDistribution(pdparam)
         super()._setup_init()
 
     def restore(self, params):
@@ -122,11 +122,11 @@ class MlpPolicyValue(GymCompetePolicy):
                     return dense(last_out, shape, f'{prefix}final',
                                  weight_init=self.weight_init)
 
-                self.value_fn = dense_net('vff', 1)
+                self._value_fn = dense_net('vff', 1)
                 if self.normalized and self.normalized != 'ob':
-                    self.value_fn = self.value_fn * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
+                    self._value_fn = self.value_fn * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
 
-                self.policy = dense_net('pol', ac_space.shape[0])
+                self._policy = dense_net('pol', ac_space.shape[0])
                 self.logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]],
                                               initializer=tf.zeros_initializer())
 
@@ -134,7 +134,7 @@ class MlpPolicyValue(GymCompetePolicy):
 
     def step(self, obs, state=None, mask=None, deterministic=False):
         action = self.deterministic_action if deterministic else self.action
-        outputs = [action, self._value, self.neglogp]
+        outputs = [action, self.value_flat, self.neglogp]
         a, v, neglogp = self.sess.run(outputs, {self.obs_ph: obs})
         return a, v, self.initial_state, neglogp
 
@@ -142,27 +142,26 @@ class MlpPolicyValue(GymCompetePolicy):
         return self.sess.run(self.policy_proba, {self.obs_ph: obs})
 
     def value(self, obs, state=None, mask=None):
-        value = self.sess.run(self._value, {self.obs_ph: obs})
+        value = self.sess.run(self.value_flat, {self.obs_ph: obs})
         return value
 
 
-class LSTMPolicy(GymCompetePolicy):
-    recurrent = True
-
+class LSTMPolicy(GymCompetePolicy, StatefulActorCriticPolicy):
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=None,
                  scope="input", reuse=False, normalize=False):
-        super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                         scope=scope, reuse=reuse, normalize=normalize)
         if hiddens is None:
             hiddens = [128, 128]
+        num_lstm = hiddens[-1]
+
+        StatefulActorCriticPolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
+                                           state_shape=(4, num_lstm), reuse=reuse)
+        GymCompetePolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
+                                  scope=scope, reuse=reuse, normalize=normalize)
+
         with self.sess.graph.as_default():
             with tf.variable_scope(scope, reuse=reuse):
-                num_lstm = hiddens[-1]
-                self.states_ph = tf.placeholder(tf.float32, [self.n_env, 4, num_lstm], name="lstmpv_ch")
-                self.masks_ph = tf.placeholder(dtype=tf.float32, shape=[n_batch], name="masks")
                 self.state_out = []
                 states = tf.transpose(self.states_ph, (1, 0, 2))
-                self.zero_state = np.zeros((4, num_lstm), dtype=np.float32)
 
                 def lstm(start, suffix):
                     # Feed forward
@@ -173,7 +172,7 @@ class LSTMPolicy(GymCompetePolicy):
                     # Batch->Seq
                     input_seq = tf.reshape(ff_out, [self.n_env, n_steps, -1])
                     input_seq = tf.transpose(input_seq, (1, 0, 2))
-                    masks = tf.reshape(self.masks_ph, [self.n_env, n_steps, 1])
+                    masks = tf.reshape(self.dones_ph, [self.n_env, n_steps, 1])
 
                     # RNN
                     inputs_ta = tf.TensorArray(dtype=tf.float32, size=n_steps)
@@ -215,9 +214,9 @@ class LSTMPolicy(GymCompetePolicy):
                     return last_out
 
                 value_out = lstm(0, 'v')
-                self.value_fn = tf.contrib.layers.fully_connected(value_out, 1, activation_fn=None)
+                self._value_fn = tf.contrib.layers.fully_connected(value_out, 1, activation_fn=None)
                 if self.normalized and self.normalized != 'ob':
-                    self.value_fn = self.value_fn * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
+                    self._value_fn = self.value_fn * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
 
                 mean = lstm(2, 'p')
                 mean = tf.contrib.layers.fully_connected(mean, ac_space.shape[0],
@@ -225,10 +224,11 @@ class LSTMPolicy(GymCompetePolicy):
                 logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]],
                                          initializer=tf.zeros_initializer())
 
-                self.policy = tf.reshape(mean, [n_batch] + list(ac_space.shape))
+                self._policy = tf.reshape(mean, [n_batch] + list(ac_space.shape))
                 self.logstd = tf.reshape(logstd, ac_space.shape)
 
-                self.initial_state = np.tile(self.zero_state, (self.n_env, 1, 1))
+                zero_state = np.zeros((4, num_lstm), dtype=np.float32)
+                self._initial_state = np.tile(zero_state, (self.n_env, 1, 1))
 
                 for p in self.get_trainable_variables():
                     tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, tf.reduce_sum(tf.square(p)))
@@ -239,12 +239,12 @@ class LSTMPolicy(GymCompetePolicy):
         return {
             self.obs_ph: obs,
             self.states_ph: state,
-            self.masks_ph: mask,
+            self.dones_ph: mask,
         }
 
     def step(self, obs, state=None, mask=None, deterministic=False):
         action = self.deterministic_action if deterministic else self.action
-        outputs = [action, self._value, self.state_out, self.neglogp]
+        outputs = [action, self.value_flat, self.state_out, self.neglogp]
         feed_dict = self._make_feed_dict(obs, state, mask)
         a, v, s, neglogp = self.sess.run(outputs, feed_dict)
         state = []
@@ -259,7 +259,7 @@ class LSTMPolicy(GymCompetePolicy):
         return self.sess.run(self.policy_proba, self._make_feed_dict(obs, state, mask))
 
     def value(self, obs, state=None, mask=None):
-        return self.sess.run(self._value, self._make_feed_dict(obs, state, mask))
+        return self.sess.run(self.value_flat, self._make_feed_dict(obs, state, mask))
 
 
 register_policy('BansalMlpPolicy', MlpPolicyValue)
