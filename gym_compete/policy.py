@@ -53,10 +53,11 @@ def dense(x, size, name, weight_init=None, bias=True):
 
 
 class GymCompetePolicy(ActorCriticPolicy):
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, scope="input",
-                 reuse=False, normalize=False):
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=None,
+                 scope="input", reuse=False, normalize=False):
         super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
                          reuse=reuse, scale=False)
+        self.hiddens = hiddens
         self.normalized = normalize
         self.weight_init = ortho_init(scale=0.01)
 
@@ -104,14 +105,11 @@ class GymCompetePolicy(ActorCriticPolicy):
 class MlpPolicyValue(GymCompetePolicy):
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=None,
                  scope="input", reuse=False, normalize=False):
-        super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                         scope=scope, reuse=reuse, normalize=normalize)
-
         if hiddens is None:
             hiddens = [64, 64]
+        super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=hiddens,
+                         scope=scope, reuse=reuse, normalize=normalize)
         self.initial_state = None
-        self.hiddens = hiddens
-
         with self.sess.graph.as_default():
             with tf.variable_scope(scope, reuse=reuse):
                 def dense_net(prefix, shape):
@@ -155,11 +153,10 @@ class LSTMPolicy(GymCompetePolicy):
 
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=None,
                  scope="input", reuse=False, normalize=False):
-        super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                         scope=scope, reuse=reuse, normalize=normalize)
         if hiddens is None:
             hiddens = [128, 128]
-        self.hiddens = hiddens
+        super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=hiddens,
+                         scope=scope, reuse=reuse, normalize=normalize)
         with self.sess.graph.as_default():
             with tf.variable_scope(scope, reuse=reuse):
                 num_lstm = self.hiddens[-1]
