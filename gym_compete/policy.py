@@ -116,18 +116,21 @@ class MlpPolicyValue(GymCompetePolicy):
             with tf.variable_scope(scope, reuse=reuse):
                 def dense_net(prefix, shape):
                     last_out = self.obz
+                    ff_outs = []
                     for i, hid_size in enumerate(hiddens):
                         h = dense(last_out, hid_size, f'{prefix}{i + 1}',
                                   weight_init=self.weight_init)
                         last_out = tf.nn.tanh(h)
+                        ff_outs.append(last_out)
                     return dense(last_out, shape, f'{prefix}final',
-                                 weight_init=self.weight_init)
+                                 weight_init=self.weight_init), ff_outs
 
-                self.value_fn = dense_net('vff', 1)
+                self.value_fn, value_ff_acts = dense_net('vff', 1)
                 if self.normalized and self.normalized != 'ob':
                     self.value_fn = self.value_fn * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
 
-                self.policy = dense_net('pol', ac_space.shape[0])
+                self.policy, policy_ff_acts = dense_net('pol', ac_space.shape[0])
+                self.ff_out = {'value': value_ff_acts, 'policy': policy_ff_acts}
                 self.logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]],
                                               initializer=tf.zeros_initializer())
 
