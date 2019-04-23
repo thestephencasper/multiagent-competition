@@ -134,11 +134,16 @@ class MlpPolicyValue(GymCompetePolicy):
 
                 self._setup_init()
 
-    def step(self, obs, state=None, mask=None, deterministic=False):
+    def step(self, obs, state=None, mask=None, deterministic=False, extra_op=None):
         action = self.deterministic_action if deterministic else self.action
         outputs = [action, self.value_flat, self.neglogp]
-        a, v, neglogp = self.sess.run(outputs, {self.obs_ph: obs})
-        return a, v, self.initial_state, neglogp
+        if extra_op is not None:
+            outputs.append(extra_op)
+            a, v, neglogp, ex = self.sess.run(outputs, {self.obs_ph: obs})
+            return a, v, self.initial_state, neglogp, ex
+        else:
+            a, v, neglogp = self.sess.run(outputs, {self.obs_ph: obs})
+            return a, v, self.initial_state, neglogp
 
     def proba_step(self, obs, state=None, mask=None):
         return self.sess.run(self.policy_proba, {self.obs_ph: obs})
@@ -246,18 +251,27 @@ class LSTMPolicy(GymCompetePolicy, StatefulActorCriticPolicy):
             self.dones_ph: mask,
         }
 
-    def step(self, obs, state=None, mask=None, deterministic=False):
+    def step(self, obs, state=None, mask=None, deterministic=False, extra_op=None):
         action = self.deterministic_action if deterministic else self.action
-        outputs = [action, self.value_flat, self.state_out, self.neglogp]
         feed_dict = self._make_feed_dict(obs, state, mask)
-        a, v, s, neglogp = self.sess.run(outputs, feed_dict)
+        outputs = [action, self.value_flat, self.state_out, self.neglogp]
+        if extra_op is not None:
+            outputs.append(extra_op)
+            a, v, s, neglogp, ex = self.sess.run(outputs, feed_dict)
+        else:
+            a, v, s, neglogp = self.sess.run(outputs, feed_dict)
+
         state = []
         for x in s:
             state.append(x.c)
             state.append(x.h)
         state = np.array(state)
         state = np.transpose(state, (1, 0, 2))
-        return a, v, state, neglogp
+
+        if extra_op is not None:
+            return a, v, state, neglogp, ex
+        else:
+            return a, v, state, neglogp
 
     def proba_step(self, obs, state=None, mask=None):
         return self.sess.run(self.policy_proba, self._make_feed_dict(obs, state, mask))
