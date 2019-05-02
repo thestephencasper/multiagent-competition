@@ -60,6 +60,8 @@ class GymCompetePolicy(ActorCriticPolicy):
         self.hiddens = hiddens
         self.normalized = normalize
         self.weight_init = ortho_init(scale=0.01)
+        self.observation_space = ob_space
+        self.action_space = ac_space
 
         with self.sess.graph.as_default():
             with tf.variable_scope(scope, reuse=reuse):
