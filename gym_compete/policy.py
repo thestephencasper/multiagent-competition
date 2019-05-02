@@ -53,12 +53,15 @@ def dense(x, size, name, weight_init=None, bias=True):
 
 
 class GymCompetePolicy(ActorCriticPolicy):
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, state_shape=None,
-                 scope="input", reuse=False, normalize=False):
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=None,
+                 state_shape=None, scope="input", reuse=False, normalize=False):
         ActorCriticPolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
                                    reuse=reuse, scale=False)
+        self.hiddens = hiddens
         self.normalized = normalize
         self.weight_init = ortho_init(scale=0.01)
+        self.observation_space = ob_space
+        self.action_space = ac_space
 
         with self.sess.graph.as_default():
             with tf.variable_scope(scope, reuse=reuse):
@@ -104,39 +107,45 @@ class GymCompetePolicy(ActorCriticPolicy):
 class MlpPolicyValue(GymCompetePolicy):
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=None,
                  scope="input", reuse=False, normalize=False):
-        super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                         scope=scope, reuse=reuse, normalize=normalize)
-
         if hiddens is None:
             hiddens = [64, 64]
-        self.initial_state = None
-
+        super().__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=hiddens,
+                         scope=scope, reuse=reuse, normalize=normalize)
+        self._initial_state = None
         with self.sess.graph.as_default():
             with tf.variable_scope(scope, reuse=reuse):
                 def dense_net(prefix, shape):
                     last_out = self.obz
+                    ff_outs = []
                     for i, hid_size in enumerate(hiddens):
                         h = dense(last_out, hid_size, f'{prefix}{i + 1}',
                                   weight_init=self.weight_init)
                         last_out = tf.nn.tanh(h)
+                        ff_outs.append(last_out)
                     return dense(last_out, shape, f'{prefix}final',
-                                 weight_init=self.weight_init)
+                                 weight_init=self.weight_init), ff_outs
 
-                self._value_fn = dense_net('vff', 1)
+                self._value_fn, value_ff_acts = dense_net('vff', 1)
                 if self.normalized and self.normalized != 'ob':
-                    self._value_fn = self.value_fn * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
+                    self._value_fn = self._value_fn * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
 
-                self._policy = dense_net('pol', ac_space.shape[0])
+                self._policy, policy_ff_acts = dense_net('pol', ac_space.shape[0])
+                self.ff_out = {'value': value_ff_acts, 'policy': policy_ff_acts}
                 self.logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]],
                                               initializer=tf.zeros_initializer())
 
                 self._setup_init()
 
-    def step(self, obs, state=None, mask=None, deterministic=False):
+    def step(self, obs, state=None, mask=None, deterministic=False, extra_op=None):
         action = self.deterministic_action if deterministic else self.action
         outputs = [action, self.value_flat, self.neglogp]
-        a, v, neglogp = self.sess.run(outputs, {self.obs_ph: obs})
-        return a, v, self.initial_state, neglogp
+        if extra_op is not None:
+            outputs.append(extra_op)
+            a, v, neglogp, ex = self.sess.run(outputs, {self.obs_ph: obs})
+            return a, v, self.initial_state, neglogp, ex
+        else:
+            a, v, neglogp = self.sess.run(outputs, {self.obs_ph: obs})
+            return a, v, self.initial_state, neglogp
 
     def proba_step(self, obs, state=None, mask=None):
         return self.sess.run(self.policy_proba, {self.obs_ph: obs})
@@ -156,7 +165,7 @@ class LSTMPolicy(GymCompetePolicy, StatefulActorCriticPolicy):
         StatefulActorCriticPolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
                                            state_shape=(4, num_lstm), reuse=reuse)
         GymCompetePolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                                  scope=scope, reuse=reuse, normalize=normalize)
+                                  hiddens=hiddens, scope=scope, reuse=reuse, normalize=normalize)
 
         with self.sess.graph.as_default():
             with tf.variable_scope(scope, reuse=reuse):
@@ -166,9 +175,11 @@ class LSTMPolicy(GymCompetePolicy, StatefulActorCriticPolicy):
                 def lstm(start, suffix):
                     # Feed forward
                     ff_out = self.obz
-                    for hidden in hiddens[:-1]:
+                    ff_list = []
+                    for hidden in self.hiddens[:-1]:
                         ff_out = tf.contrib.layers.fully_connected(ff_out, hidden)
-
+                        batch_ff_out = tf.reshape(ff_out, [self.n_env, n_steps, -1])
+                        ff_list.append(batch_ff_out)
                     # Batch->Seq
                     input_seq = tf.reshape(ff_out, [self.n_env, n_steps, -1])
                     input_seq = tf.transpose(input_seq, (1, 0, 2))
@@ -211,19 +222,19 @@ class LSTMPolicy(GymCompetePolicy, StatefulActorCriticPolicy):
                     last_out = seq_to_batch(last_out)
                     self.state_out.append(final_state)
 
-                    return last_out
+                    return last_out, ff_list
 
-                value_out = lstm(0, 'v')
+                value_out, value_ff_acts = lstm(0, 'v')
                 self._value_fn = tf.contrib.layers.fully_connected(value_out, 1, activation_fn=None)
                 if self.normalized and self.normalized != 'ob':
                     self._value_fn = self.value_fn * self.ret_rms.std + self.ret_rms.mean  # raw = not standardized
 
-                mean = lstm(2, 'p')
+                mean, policy_ff_acts = lstm(2, 'p')
                 mean = tf.contrib.layers.fully_connected(mean, ac_space.shape[0],
                                                          activation_fn=None)
                 logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]],
                                          initializer=tf.zeros_initializer())
-
+                self.ff_out = {'value': value_ff_acts, 'policy': policy_ff_acts}
                 self._policy = tf.reshape(mean, [n_batch] + list(ac_space.shape))
                 self.logstd = tf.reshape(logstd, ac_space.shape)
 
@@ -242,18 +253,27 @@ class LSTMPolicy(GymCompetePolicy, StatefulActorCriticPolicy):
             self.dones_ph: mask,
         }
 
-    def step(self, obs, state=None, mask=None, deterministic=False):
+    def step(self, obs, state=None, mask=None, deterministic=False, extra_op=None):
         action = self.deterministic_action if deterministic else self.action
-        outputs = [action, self.value_flat, self.state_out, self.neglogp]
         feed_dict = self._make_feed_dict(obs, state, mask)
-        a, v, s, neglogp = self.sess.run(outputs, feed_dict)
+        outputs = [action, self.value_flat, self.state_out, self.neglogp]
+        if extra_op is not None:
+            outputs.append(extra_op)
+            a, v, s, neglogp, ex = self.sess.run(outputs, feed_dict)
+        else:
+            a, v, s, neglogp = self.sess.run(outputs, feed_dict)
+
         state = []
         for x in s:
             state.append(x.c)
             state.append(x.h)
         state = np.array(state)
         state = np.transpose(state, (1, 0, 2))
-        return a, v, state, neglogp
+
+        if extra_op is not None:
+            return a, v, state, neglogp, ex
+        else:
+            return a, v, state, neglogp
 
     def proba_step(self, obs, state=None, mask=None):
         return self.sess.run(self.policy_proba, self._make_feed_dict(obs, state, mask))
