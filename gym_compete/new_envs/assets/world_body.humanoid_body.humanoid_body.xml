@@ -5,10 +5,10 @@
   <default>
     <joint armature="1" damping="1" limited="true" />
   <default class="agent0"><joint armature="1" damping="1" limited="true" />
-    <geom conaffinity="1" condim="1" contype="1" margin="0.001" material="geom" rgba="0.5 0.25 0.25 1" />
+    <geom conaffinity="1" condim="1" contype="1" margin="0.001" rgba="0.5 0.25 0.25 1" />
     <motor ctrllimited="true" ctrlrange="-.4 .4" />
 </default><default class="agent1"><joint armature="1" damping="1" limited="true" />
-    <geom conaffinity="1" condim="1" contype="1" margin="0.001" material="geom" rgba="0.25 0.5 0.5 1" />
+    <geom conaffinity="1" condim="1" contype="1" margin="0.001" rgba="0.25 0.5 0.5 1" />
     <motor ctrllimited="true" ctrlrange="-.4 .4" />
 </default></default>
   <asset>

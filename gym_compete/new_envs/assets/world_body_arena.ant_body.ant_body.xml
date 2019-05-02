@@ -14,7 +14,7 @@
   <asset>
     <texture builtin="gradient" height="100" rgb1="1 1 1" rgb2="0 0 0" type="skybox" width="100" />
     <texture builtin="flat" height="1278" mark="cross" markrgb="1 1 1" name="texgeom" random="0.01" rgb1="0.8 0.6 0.4" rgb2="0.8 0.6 0.4" type="cube" width="127" />
-    <texture builtin="checker" height="100" name="texplane" rgb1="0 0.5 0.5" rgb2="0 0.6 0.6" type="2d" width="100" />
+    <texture builtin="checker" height="100" name="texplane" rgb1=".1 .1 .1" rgb2=".3 .3 0.3" type="2d" width="100"/>
     <material name="MatPlane" reflectance="0.5" shininess="1" specular="1" texrepeat="60 60" texture="texplane" />
     <material name="geom" texture="texgeom" texuniform="true" />
   </asset>
@@ -23,7 +23,7 @@
     <geom conaffinity="1" condim="3" contype="1" friction="1 .1 .1" material="MatPlane" name="floor" pos="0 0 0" rgba="0.8 0.9 0.8 1" size="20 20 0.125" type="plane" />
     <geom fromto="4 -5 0  4 +5 0" name="rightgoal" rgba="0.6 0.0 0.0 0" size=".03" type="cylinder" />
     <geom fromto="-4 -5 0  -4 +5 0" name="leftgoal" rgba="0.6 0.0 0.0 0" size=".03" type="cylinder" />
-    <geom conaffinity="0xffffffff" condim="3" contype="1" friction="1 .1 .1" name="arena" pos="0 0 0.25" rgba="0.3 0.3 0.5 0.8" size="4.5 .25" type="cylinder" />
+    <geom conaffinity="0xffffffff" condim="3" contype="1" friction="1 .1 .1" name="arena" pos="0 0 0.25" rgba="0.5 0.5 0.5 0.8" size="4.5 .25" type="cylinder" />
   <body euler="0 0 180" name="agent0/torso" pos="-1 0 2.5">
   <geom class="agent0" name="agent0/torso_geom" pos="0 0 0" size="0.25" type="sphere" />
   <joint armature="0" damping="0" limited="false" margin="0.01" name="agent0/root" pos="0 0 0" range="-30 30" type="free" />
