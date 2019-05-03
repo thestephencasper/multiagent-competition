@@ -1,12 +1,10 @@
 """Abstract policy class and some concrete implementations."""
 
-import copy
-
 from gym.spaces import Box
 import numpy as np
 from stable_baselines.a2c.utils import ortho_init, seq_to_batch
 from stable_baselines.common.distributions import DiagGaussianProbabilityDistribution
-from stable_baselines.common.policies import ActorCriticPolicy, StatefulActorCriticPolicy, register_policy
+from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCriticPolicy, register_policy
 import tensorflow as tf
 
 
@@ -155,14 +153,14 @@ class MlpPolicyValue(GymCompetePolicy):
         return value
 
 
-class LSTMPolicy(GymCompetePolicy, StatefulActorCriticPolicy):
+class LSTMPolicy(GymCompetePolicy, RecurrentActorCriticPolicy):
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=None,
                  scope="input", reuse=False, normalize=False):
         if hiddens is None:
             hiddens = [128, 128]
         num_lstm = hiddens[-1]
 
-        StatefulActorCriticPolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
+        RecurrentActorCriticPolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
                                            state_shape=(4, num_lstm), reuse=reuse)
         GymCompetePolicy.__init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
                                   hiddens=hiddens, scope=scope, reuse=reuse, normalize=normalize)
