@@ -80,7 +80,7 @@ class KickAndDefend(MultiAgentEnv):
     def goal_rewards(self, infos=None, agent_dones=None):
         self._elapsed_steps += 1
         # print(self._elapsed_steps, self.keeper_touched_ball)
-        goal_rews = [0. for _ in range(self.n_agents)]
+        goal_rews = [0. for _ in range(self.num_agents)]
         ball_xyz = self.get_ball_qpos()[:3]
         done = self._past_limit() or (self.GOAL_X > 0 and ball_xyz[0] > self.GOAL_X) or (self.GOAL_X < 0 and ball_xyz[0] < self.GOAL_X)
         ball_vel = self.get_ball_qvel()[:3]
@@ -94,7 +94,7 @@ class KickAndDefend(MultiAgentEnv):
             # print("detected contacts for keeper:", ball_contacts)
             self.keeper_touched_ball = True
         if self.is_goal():
-            for i in range(self.n_agents):
+            for i in range(self.num_agents):
                 if self.agents[i].team == 'walker':
                     goal_rews[i] += self.GOAL_REWARD
                     infos[i]['winner'] = True
@@ -102,7 +102,7 @@ class KickAndDefend(MultiAgentEnv):
                     goal_rews[i] -= self.GOAL_REWARD
             done = True
         elif done or all(agent_dones):
-            for i in range(self.n_agents):
+            for i in range(self.num_agents):
                 if self.agents[i].team == 'walker':
                         goal_rews[i] -= self.GOAL_REWARD
                 else:
@@ -116,18 +116,18 @@ class KickAndDefend(MultiAgentEnv):
                         goal_rews[i] += 0.5 * self.GOAL_REWARD
         else:
             keeper_penalty = False
-            for i in range(self.n_agents):
+            for i in range(self.num_agents):
                 if self.agents[i].team == 'blocker':
                     if np.abs(self.GOAL_X - self.agents[i].get_qpos()[0]) > 2.5:
                         keeper_penalty = True
                         break
             if keeper_penalty:
                 done = True
-                for i in range(self.n_agents):
+                for i in range(self.num_agents):
                     if self.agents[i].team == 'blocker':
                         goal_rews[i] -= self.GOAL_REWARD
             else:
-                for i in range(self.n_agents):
+                for i in range(self.num_agents):
                     if self.agents[i].team == 'walker':
                         # goal_rews[i] -= np.abs(ball_xyz[0] - self.GOAL_X)
                         infos[i]['reward_move'] -= np.abs(ball_xyz[0] - self.GOAL_X).item()
@@ -147,8 +147,8 @@ class KickAndDefend(MultiAgentEnv):
         self.env_scene.set_state(qpos, qvel)
 
     def _set_random_ball_pos(self):
-        x = np.random.uniform(*self.BALL_RANGE_X)
-        y = np.random.uniform(*self.BALL_RANGE_Y)
+        x = self.env_scene.np_random.uniform(*self.BALL_RANGE_X)
+        y = self.env_scene.np_random.uniform(*self.BALL_RANGE_Y)
         z = 0.35
         # print("setting ball to {}".format((x, y, z)))
         self._set_ball_xyz((x,y,z))
@@ -169,24 +169,21 @@ class KickAndDefend(MultiAgentEnv):
         # print(self.BALL_RANGE_X)
         # print(self.BALL_RANGE_Y)
 
-    def _reset(self, version=None):
+    def reset(self, margins=None, version=None):
         self._elapsed_steps = 0
         self.keeper_touched_ball = False
         _ = self.env_scene.reset()
         if version is not None:
             self._reset_range(version)
-        for i in range(self.n_agents):
-            x = np.random.uniform(*self.RANGE_X[i])
-            y = np.random.uniform(*self.RANGE_Y[i])
+        for i in range(self.num_agents):
+            x = self.env_scene.np_random.uniform(*self.RANGE_X[i])
+            y = self.env_scene.np_random.uniform(*self.RANGE_Y[i])
             # print("setting agent {} to pos {}".format(i, (x,y)))
             self.agents[i].set_xyz((x, y, None))
             self.agents[i].reset_agent()
         if self.randomize_ball:
             self._set_random_ball_pos()
-        return self._get_obs()
 
-    def reset(self, margins=None, version=None):
-        _ = self._reset(version=version)
         if self.agents[0].team == 'walker':
             self.walker_id = 0
             self.blocker_id = 1
@@ -195,7 +192,7 @@ class KickAndDefend(MultiAgentEnv):
             self.blocker_id = 0
         self.GOAL_X = self.agents[self.walker_id].TARGET
         if margins is not None:
-            for i in range(self.n_agents):
+            for i in range(self.num_agents):
                 self.agents[i].set_margin(margins[i])
         # print("GOAL_X:", self.GOAL_X)
         ob = self._get_obs()

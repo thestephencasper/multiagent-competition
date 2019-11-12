@@ -1,23 +1,20 @@
 import numpy as np
-from gym import utils
-from gym.envs.mujoco import mujoco_env
-from gym import spaces
-import os
 
-class MultiAgentScene(mujoco_env.MujocoEnv, utils.EzPickle):
+from gym_compete.new_envs import mujoco_env
+
+class MultiAgentScene(mujoco_env.MujocoEnv):
 
     def __init__(self, xml_path, n_agents):
         self.n_agents = n_agents
         self._mujoco_init = False
         mujoco_env.MujocoEnv.__init__(self, xml_path, 5)
         self._mujoco_init = True
-        utils.EzPickle.__init__(self)
 
     def simulate(self, actions):
         a = np.concatenate(actions, axis=0)
         self.do_simulation(a, self.frame_skip)
 
-    def _step(self, actions):
+    def step(self, actions):
         '''
         Just to satisfy mujoco_init, should not be used
         '''
@@ -55,7 +52,7 @@ class MultiAgentScene(mujoco_env.MujocoEnv, utils.EzPickle):
         self.viewer.cam.azimuth = 90
         # self.viewer.vopt.flags[8] = True
         # self.viewer.vopt.flags[9] = True
-        rand = np.random.random()
+        rand = self.np_random.random()
         if rand < 0.33:
             self.viewer.cam.azimuth = 0
         elif 0.33 <= rand < 0.66:

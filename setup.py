@@ -8,7 +8,7 @@ def read_requirements_file(filename):
 
 setup(name='gym_compete',
       author='Trapit Bansal et al, with modifications by Adam Gleave',
-      version='0.0.1',
+      version='0.0.2',
       url='https://github.com/HumanCompatibleAI/multiagent-competition',
       python_requires='>=3.6.0',
       packages=find_packages(exclude=('tests',)),

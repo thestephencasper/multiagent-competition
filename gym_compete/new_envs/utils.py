@@ -36,7 +36,7 @@ def add_prefix(root, prop, prefix, force_set=False):
     if root_prop_val is not None:
         root.set(prop, prefix + '/' + root_prop_val)
     elif force_set:
-        root.set(prop, prefix + '/' + 'anon' + str(np.random.randint(1, 1e10)))
+        root.set(prop, prefix + '/' + 'anon' + str(self.env_scene.np_random.randint(1, 1e10)))
     children = list(root)
     for child in children:
         add_prefix(child, prop, prefix, force_set)

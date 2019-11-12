@@ -57,18 +57,18 @@ class MultiAgentEnv(Env):
         '''
             agent_args is a list of kwargs for each agent
         '''
-        self.n_agents = len(agent_names)
+        self.num_agents = len(agent_names)
         self.agents = {}
         all_agent_xml_paths = []
         if not agent_args:
-            agent_args = [{} for _ in range(self.n_agents)]
-        assert len(agent_args) == self.n_agents, "Incorrect length of agent_args"
+            agent_args = [{} for _ in range(self.num_agents)]
+        assert len(agent_args) == self.num_agents, "Incorrect length of agent_args"
         for i, name in enumerate(agent_names):
             print("Creating agent", name)
             agent_xml_path, agent_class = agent_map[name]
             self.agents[i] = agent_class(i, agent_xml_path, **agent_args[i])
             all_agent_xml_paths.append(agent_xml_path)
-        agent_scopes = ['agent' + str(i) for i in range(self.n_agents)]
+        agent_scopes = ['agent' + str(i) for i in range(self.num_agents)]
         # print(scene_xml_path)
         if scene_xml_path is not None and os.path.exists(scene_xml_path):
             self._env_xml_path = scene_xml_path
@@ -82,7 +82,7 @@ class MultiAgentEnv(Env):
                 ini_pos=init_pos, rgb=rgb
             )
         print("Scene XML path:", self._env_xml_path)
-        self.env_scene = MultiAgentScene(self._env_xml_path, self.n_agents)
+        self.env_scene = MultiAgentScene(self._env_xml_path, self.num_agents)
         print("Created Scene with agents")
         for i, agent in self.agents.items():
             agent.set_env(self.env_scene)
@@ -94,7 +94,7 @@ class MultiAgentEnv(Env):
         self.RIGHT_GOAL = self.env_scene.model.geom_pos[gid][0]
         gid = self.env_scene.model.geom_names.index(six.b('leftgoal'))
         self.LEFT_GOAL = self.env_scene.model.geom_pos[gid][0]
-        for i in range(self.n_agents):
+        for i in range(self.num_agents):
             if self.agents[i].get_qpos()[0] > 0:
                 self.agents[i].set_goal(self.LEFT_GOAL)
             else:
@@ -102,22 +102,22 @@ class MultiAgentEnv(Env):
 
     def _set_observation_space(self):
         self.observation_space = spaces.Tuple(
-            [self.agents[i].observation_space for i in range(self.n_agents)]
+            [self.agents[i].observation_space for i in range(self.num_agents)]
         )
 
     def _set_action_space(self):
         self.action_space = spaces.Tuple(
-            [self.agents[i].action_space for i in range(self.n_agents)]
+            [self.agents[i].action_space for i in range(self.num_agents)]
         )
 
     def goal_rewards(self, infos=None, agent_dones=None):
         touchdowns = [self.agents[i].reached_goal()
-                      for i in range(self.n_agents)]
+                      for i in range(self.num_agents)]
         num_reached_goal = sum(touchdowns)
-        goal_rews = [0. for _ in range(self.n_agents)]
+        goal_rews = [0. for _ in range(self.num_agents)]
         if num_reached_goal != 1:
             return goal_rews, num_reached_goal > 0
-        for i in range(self.n_agents):
+        for i in range(self.num_agents):
             if touchdowns[i]:
                 goal_rews[i] = self.GOAL_REWARD
                 if infos:
@@ -129,17 +129,16 @@ class MultiAgentEnv(Env):
     def _get_done(self, dones, game_done):
         done = np.all(dones)
         done = game_done or not np.isfinite(self.state_vector()).all() or done
-        dones = tuple(done for _ in range(self.n_agents))
-        return dones
+        return bool(done)
 
-    def _step(self, actions):
-        for i in range(self.n_agents):
+    def step(self, actions):
+        for i in range(self.num_agents):
             self.agents[i].before_step()
         self.env_scene.simulate(actions)
         move_rews = []
         infos = []
         dones = []
-        for i in range(self.n_agents):
+        for i in range(self.num_agents):
             move_r, agent_done, rinfo = self.agents[i].after_step(actions[i])
             move_rews.append(move_r)
             dones.append(agent_done)
@@ -152,21 +151,21 @@ class MultiAgentEnv(Env):
             rews.append(float(goal_rews[i] + self.move_reward_weight * move_rews[i]))
         rews = tuple(rews)
         done = self._get_done(dones, game_done)
-        infos = tuple(infos)
+        infos = {i: info for i, info in enumerate(infos)}
         obses = self._get_obs()
         return obses, rews, done, infos
 
     def _get_obs(self):
-        return tuple([self.agents[i]._get_obs() for i in range(self.n_agents)])
+        return tuple([self.agents[i]._get_obs() for i in range(self.num_agents)])
 
     '''
     Following remaps all mujoco-env calls to the scene
     '''
-    def _seed(self, seed=None):
-        return self.env_scene._seed(seed)
+    def seed(self, seed=None):
+        return self.env_scene.seed(seed)
 
-    def _reset(self):
-        # _ = self.env_scene._reset()
+    def reset(self):
+        # _ = self.env_scene.reset()
         ob = self.reset_model()
         return ob
 
@@ -177,8 +176,8 @@ class MultiAgentEnv(Env):
     def dt(self):
         return self.env_scene.dt
 
-    def _render(self, mode='human', close=False):
-        return self.env_scene._render(mode, close)
+    def render(self, mode='human', close=False):
+        return self.env_scene.render(mode, close)
 
     def state_vector(self):
         return self.env_scene.state_vector()
@@ -186,7 +185,7 @@ class MultiAgentEnv(Env):
     def reset_model(self):
         # self.env_scene.reset_model()
         _ = self.env_scene.reset()
-        for i in range(self.n_agents):
+        for i in range(self.num_agents):
             self.agents[i].reset_agent()
         return self._get_obs()
 

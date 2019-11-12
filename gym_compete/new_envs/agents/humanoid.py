@@ -50,7 +50,7 @@ class Humanoid(Agent):
         reward_info['reward_move'] = reward
 
         # done = not agent_standing
-        done = qpos[2] < 0.8
+        done = bool(qpos[2] < 0.8)
 
         return reward, done, reward_info
 

@@ -66,12 +66,12 @@ class SumoEnv(MultiAgentEnv):
 
     def goal_rewards(self, infos=None, agent_dones=None):
         self._elapsed_steps += 1
-        goal_rews = [0. for _ in range(self.n_agents)]
+        goal_rews = [0. for _ in range(self.num_agents)]
         fallen = [self._is_fallen(i)
-                  for i in range(self.n_agents)]
+                  for i in range(self.num_agents)]
 
         timeup = self._past_limit()
-        past_arena = [self._past_arena(i) for i in range(self.n_agents)]
+        past_arena = [self._past_arena(i) for i in range(self.num_agents)]
         done = False
 
         agent_contacts = self.get_agent_contacts()
@@ -81,7 +81,7 @@ class SumoEnv(MultiAgentEnv):
 
         if any(fallen):
             done = True
-            for j in range(self.n_agents):
+            for j in range(self.num_agents):
                 if fallen[j]:
                     goal_rews[j] -= self.GOAL_REWARD
                 elif self.agent_contacts:
@@ -90,14 +90,14 @@ class SumoEnv(MultiAgentEnv):
             # import ipdb; ipdb.set_trace()
         elif any(past_arena):
             done = True
-            for j in range(self.n_agents):
+            for j in range(self.num_agents):
                 if past_arena[j]:
                     goal_rews[j] -= self.GOAL_REWARD
                 elif self.agent_contacts:
                     goal_rews[j] += self.GOAL_REWARD
                     infos[j]['winner'] = True
         elif timeup:
-            for j in range(self.n_agents):
+            for j in range(self.num_agents):
                 goal_rews[j] -= self.GOAL_REWARD
 
         done = timeup or done
@@ -108,7 +108,7 @@ class SumoEnv(MultiAgentEnv):
         ob_spaces_limits = []
         # nextra = 3 + self.n_agents - 1
         nextra = 4
-        for i in range(self.n_agents):
+        for i in range(self.num_agents):
             s = self.agents[i].observation_space.shape[0]
             h = np.ones(s+nextra) * np.inf
             l = -h
@@ -120,21 +120,21 @@ class SumoEnv(MultiAgentEnv):
     def _get_obs(self):
         obs = []
         dists = []
-        for i in range(self.n_agents):
+        for i in range(self.num_agents):
             xy = self.agents[i].get_qpos()[:2]
             r = np.sqrt(np.sum(xy**2))
             d = self.RADIUS - r
             # print(r, d)
             dists.append(d)
-        for i in range(self.n_agents):
+        for i in range(self.num_agents):
             ob = self.agents[i]._get_obs()
             mydist = np.asarray(dists[i])
-            if self.n_agents == 1:
+            if self.num_agents == 1:
                 other_dist = np.asarray(self.RADIUS)
-            elif self.n_agents == 2:
+            elif self.num_agents == 2:
                 other_dist = np.asarray(dists[1-i])
             else:
-                other_dist = np.asarray([dists[j] for j in range(self.n_agents) if j != i])
+                other_dist = np.asarray([dists[j] for j in range(self.num_agents) if j != i])
             ob = np.concatenate(
                 [ob.flat, np.asarray(self.RADIUS).flat,
                  mydist.flat, other_dist.flat,
@@ -151,7 +151,7 @@ class SumoEnv(MultiAgentEnv):
         # print(self.current_max_radius)
 
     def _reset_radius(self):
-        self.RADIUS = np.random.uniform(self.MIN_RADIUS, self.current_max_radius)
+        self.RADIUS = self.env_scene.np_random.uniform(self.MIN_RADIUS, self.current_max_radius)
         # print('setting Radus to', self.RADIUS)
 
     def _set_geom_radius(self):
@@ -163,19 +163,19 @@ class SumoEnv(MultiAgentEnv):
     def _reset_agents(self):
         # set agent 0
         min_gap = 0.3 + self.MIN_RADIUS / 2
-        for i in range(self.n_agents):
+        for i in range(self.num_agents):
             if i % 2 == 0:
-                x = np.random.uniform(-self.RADIUS + min_gap, -0.3)
+                x = self.env_scene.np_random.uniform(-self.RADIUS + min_gap, -0.3)
                 y_lim = np.sqrt(self.RADIUS**2 - x**2)
-                y = np.random.uniform(-y_lim + min_gap, y_lim - min_gap)
+                y = self.env_scene.np_random.uniform(-y_lim + min_gap, y_lim - min_gap)
             else:
-                x = np.random.uniform(0.3, self.RADIUS - min_gap)
+                x = self.env_scene.np_random.uniform(0.3, self.RADIUS - min_gap)
                 y_lim = np.sqrt(self.RADIUS**2 - x**2)
-                y = np.random.uniform(-y_lim + min_gap, y_lim - min_gap)
+                y = self.env_scene.np_random.uniform(-y_lim + min_gap, y_lim - min_gap)
             self.agents[i].set_xyz((x,y,None))
             # print('setting agent', i, 'at', (x,y))
 
-    def _reset(self, version=None):
+    def reset(self, margins=None, version=None):
         self._elapsed_steps = 0
         self.agent_contacts = False
         # self.RADIUS = self.START_RADIUS
@@ -187,11 +187,7 @@ class SumoEnv(MultiAgentEnv):
         _ = self.env_scene.reset()
         self._reset_agents()
         ob = self._get_obs()
-        return ob
-
-    def reset(self, margins=None, version=None):
-        ob = self._reset(version=version)
         if margins:
-            for i in range(self.n_agents):
+            for i in range(self.num_agents):
                 self.agents[i].set_margin(margins[i])
         return ob

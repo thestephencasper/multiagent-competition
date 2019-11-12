@@ -40,7 +40,7 @@ class Ant(Agent):
         reward_info['reward_survive'] = survive
         reward_info['reward_move'] = reward
 
-        done = not agent_standing
+        done = bool(not agent_standing)
 
         return reward, done, reward_info
 

@@ -33,17 +33,16 @@ class HumansBlockingEnv(MultiAgentEnv):
         return bool(self.agents[agent_id].get_qpos()[2] > limit)
 
     def _get_done(self, dones, game_done):
-        dones = tuple(game_done for _ in range(self.n_agents))
-        return dones
+        return bool(game_done)
 
     def goal_rewards(self, infos=None, agent_dones=None):
         self._elapsed_steps += 1
-        goal_rews = [0. for _ in range(self.n_agents)]
+        goal_rews = [0. for _ in range(self.num_agents)]
         touchdowns = [self.agents[i].reached_goal()
-                      for i in range(self.n_agents)]
+                      for i in range(self.num_agents)]
 
         walkers_fallen = [not self._is_standing(i)
-                          for i in range(self.n_agents)
+                          for i in range(self.num_agents)
                           if self.agents[i].team == 'walker']
 
         # print(self._elapsed_steps, touchdowns, walkers_fallen)
@@ -53,7 +52,7 @@ class HumansBlockingEnv(MultiAgentEnv):
         if not any(touchdowns):
             all_walkers_fallen = all(walkers_fallen)
             # game_over = all_walkers_fallen
-            for j in range(self.n_agents):
+            for j in range(self.num_agents):
                 if self.agents[j].team == 'blocker':
                     # goal_rews[j] += -infos[1-j]['reward_goal_dist']
                     infos[j]['reward_move'] += -infos[1-j]['reward_goal_dist']
@@ -69,7 +68,7 @@ class HumansBlockingEnv(MultiAgentEnv):
         else:
             # some walker touched-down
             done = True
-            for i in range(self.n_agents):
+            for i in range(self.num_agents):
                 if self.agents[i].team == 'walker':
                     if touchdowns[i]:
                         goal_rews[i] += self.GOAL_REWARD
@@ -80,14 +79,10 @@ class HumansBlockingEnv(MultiAgentEnv):
         # print(done, self._elapsed_steps, self._past_limit())
         return goal_rews, done
 
-    def _reset(self):
-        self._elapsed_steps = 0
-        ob = super(HumansBlockingEnv, self)._reset()
-        return ob
-
     def reset(self, margins=None):
-        ob = self._reset()
+        self._elapsed_steps = 0
+        ob = super(HumansBlockingEnv, self).reset()
         if margins:
-            for i in range(self.n_agents):
+            for i in range(self.num_agents):
                 self.agents[i].set_margin(margins[i])
         return ob
