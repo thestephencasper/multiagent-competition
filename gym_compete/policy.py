@@ -2,7 +2,8 @@
 
 from gym.spaces import Box
 import numpy as np
-from stable_baselines.a2c.utils import ortho_init, seq_to_batch
+from stable_baselines.common.tf_layers import ortho_init
+from stable_baselines.common.tf_util import seq_to_batch
 from stable_baselines.common.distributions import DiagGaussianProbabilityDistribution
 from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCriticPolicy, register_policy
 import tensorflow as tf
