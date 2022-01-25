@@ -35,7 +35,7 @@ def run(config):
         env = gym.make("run-to-goal-ants-v0")
         policy_type = "mlp"
     elif config.env == "you-shall-not-pass":
-        env = gym.make("you-shall-not-pass-humans-v0")
+        env = gym.make("multicomp/YouShallNotPassHumans-v0")
         policy_type = "mlp"
     elif config.env == "sumo-humans":
         env = gym.make("sumo-humans-v0")
