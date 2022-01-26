@@ -47,8 +47,8 @@ class SumoEnv(MultiAgentEnv):
         return bool(self.agents[agent_id].get_qpos()[2] > limit)
 
     def get_agent_contacts(self):
-        mjcontacts = self.env_scene.data._wrapped.contents.contact
-        ncon = self.env_scene.model.data.ncon
+        mjcontacts = self.env_scene.sim.data.contact
+        ncon = self.env_scene.sim.data.ncon
         contacts = []
         for i in range(ncon):
             ct = mjcontacts[i]
@@ -157,8 +157,9 @@ class SumoEnv(MultiAgentEnv):
     def _set_geom_radius(self):
         gs = self.env_scene.model.geom_size.copy()
         gs[self.arena_id][0] = self.RADIUS
-        self.env_scene.model.__setattr__('geom_size', gs)
-        self.env_scene.model.forward()
+
+        self.env_scene.model.geom_size[:] = gs[:]
+        self.env_scene.sim.forward()
 
     def _reset_agents(self):
         # set agent 0
