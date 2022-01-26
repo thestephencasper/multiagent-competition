@@ -4,7 +4,8 @@ import numpy as np
 
 
 def mass_center(mass, xpos):
-    return (np.sum(mass * xpos, 0) / np.sum(mass))[0]
+    # I think the reshape is necessary because np got stricter about broadcasting dims of size 1 vs dims of size 0, if not this calculation might be wrong
+    return (np.sum(mass.reshape(-1, 1) * xpos, 0) / np.sum(mass))[0]
 
 
 class Humanoid(Agent):

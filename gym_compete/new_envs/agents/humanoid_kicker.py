@@ -20,7 +20,7 @@ class HumanoidKicker(Humanoid):
         self.TARGET_Y = 3
 
     def set_env(self, env):
-        self.ball_jnt_id = env.model.joint_names.index(six.b('ball'))
+        self.ball_jnt_id = env.model.joint_names.index('ball')
         self.ball_jnt_nqpos = Agent.JNT_NPOS[int(env.model.jnt_type[self.ball_jnt_id])]
         super(HumanoidKicker, self).set_env(env)
 

@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 
 from gym_compete.new_envs import mujoco_env
 
@@ -27,8 +28,8 @@ class MultiAgentScene(mujoco_env.MujocoEnv):
         '''
         assert not self._mujoco_init, '_get_obs should not be called on Scene'
         obs = np.concatenate([
-            self.model.data.qpos.flat,
-            self.model.data.qvel.flat
+            self.sim.data.qpos.flat,
+            self.sim.data.qvel.flat
         ])
         return obs
 

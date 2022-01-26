@@ -18,7 +18,7 @@ class SumoEnv(MultiAgentEnv):
         self.LIM_Y = [(-2, 2), (-2, 2)]
         self.RANGE_X = self.LIM_X.copy()
         self.RANGE_Y = self.LIM_Y.copy()
-        self.arena_id = self.env_scene.model.geom_names.index(six.b('arena'))
+        self.arena_id = self.env_scene.model.geom_names.index('arena')
         self.arena_height = self.env_scene.model.geom_size[self.arena_id][1] * 2
         self._set_geom_radius()
         self.agent_contacts = False
@@ -55,12 +55,12 @@ class SumoEnv(MultiAgentEnv):
             g1 , g2 = ct.geom1, ct.geom2
             g1 = self.env_scene.model.geom_names[g1]
             g2 = self.env_scene.model.geom_names[g2]
-            if g1.find(six.b('agent')) >= 0 and g2.find(six.b('agent')) >= 0:
-                if g1.find(six.b('agent0')) >= 0:
-                    if g2.find(six.b('agent1')) >= 0 and ct.dist < 0:
+            if g1.find('agent') >= 0 and g2.find('agent') >= 0:
+                if g1.find('agent0') >= 0:
+                    if g2.find('agent1') >= 0 and ct.dist < 0:
                         contacts.append((g1, g2, ct.dist))
-                elif g1.find(six.b('agent1')) >= 0:
-                    if g2.find(six.b('agent0')) >= 0 and ct.dist < 0:
+                elif g1.find('agent1') >= 0:
+                    if g2.find('agent0') >= 0 and ct.dist < 0:
                         contacts.append((g1, g2, ct.dist))
         return contacts
 

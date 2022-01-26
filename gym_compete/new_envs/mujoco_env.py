@@ -7,18 +7,14 @@ This is needed for backwards compatibility so as not to break policies trained i
 
 import os
 
-from gym import error, spaces
+from gym import spaces
 from gym.utils import seeding
 import numpy as np
 from os import path
 import gym
-import six
 
-try:
-    import mujoco_py_131
-    from mujoco_py_131.mjlib import mjlib
-except ImportError as e:
-    raise error.DependencyNotInstalled("{}. (HINT: you need to install mujoco_py_131, and also perform the setup instructions here: https://github.com/openai/mujoco-py/.)".format(e))
+import mujoco_py
+
 
 class MujocoEnv(gym.Env):
     """Superclass for all MuJoCo environments.
@@ -32,8 +28,8 @@ class MujocoEnv(gym.Env):
         if not path.exists(fullpath):
             raise IOError("File %s does not exist" % fullpath)
         self.frame_skip = frame_skip
-        self.model = mujoco_py_131.MjModel(fullpath)
-        self.data = self.model.data
+        self.model = mujoco_py.load_model_from_path(fullpath)
+        self.sim: mujoco_py.MjSim = mujoco_py.MjSim(self.model)
         self.viewer = None
 
         self.metadata = {
@@ -41,8 +37,8 @@ class MujocoEnv(gym.Env):
             'video.frames_per_second': int(np.round(1.0 / self.dt))
         }
 
-        self.init_qpos = self.model.data.qpos.ravel().copy()
-        self.init_qvel = self.model.data.qvel.ravel().copy()
+        self.init_qpos = self.sim.data.qpos.ravel().copy()
+        self.init_qvel = self.sim.data.qvel.ravel().copy()
         observation, _reward, done, _info = self.step(np.zeros(self.model.nu))
         assert not done
         self.obs_dim = observation.size
@@ -83,7 +79,8 @@ class MujocoEnv(gym.Env):
     # -----------------------------
 
     def reset(self):
-        mjlib.mj_resetData(self.model.ptr, self.data.ptr)
+
+        self.sim.reset()
         ob = self.reset_model()
         if self.viewer is not None:
             self.viewer.autoscale()
@@ -92,19 +89,29 @@ class MujocoEnv(gym.Env):
 
     def set_state(self, qpos, qvel):
         assert qpos.shape == (self.model.nq,) and qvel.shape == (self.model.nv,)
-        self.model.data.qpos = qpos
-        self.model.data.qvel = qvel
-        self.model._compute_subtree()  # pylint: disable=W0212
-        self.model.forward()
+        state_array = self.sim.get_state().flatten()
+
+        # See https://github.com/openai/mujoco-py/blob/master/mujoco_py/mjsimstate.pyx
+        idx_time = 0
+        idx_qpos = idx_time + 1
+        idx_qvel = idx_qpos + self.sim.model.nq
+        end_qvel = idx_qvel + self.sim.model.nv
+
+        state_array[idx_qpos:idx_qvel] = qpos  # Indices 1 and 2 correspond to the respective values, override the values with passed args
+        state_array[idx_qvel:end_qvel] = qvel
+        self.sim.set_state_from_flattened(state_array)
+        # I assume this isn't necessary and is done in forward()?
+        # self.sim._compute_subtree()  # pylint: disable=W0212
+        self.sim.forward()
 
     @property
     def dt(self):
         return self.model.opt.timestep * self.frame_skip
 
     def do_simulation(self, ctrl, n_frames):
-        self.model.data.ctrl = ctrl
+        self.sim.data.ctrl[:] = ctrl
         for _ in range(n_frames):
-            self.model.step()
+            self.sim.step()
 
     def render(self, mode='human', close=False):
         if close:
@@ -118,30 +125,31 @@ class MujocoEnv(gym.Env):
             data, width, height = self._get_viewer().get_image()
             return np.fromstring(data, dtype='uint8').reshape(height, width, 3)[::-1, :, :]
         elif mode == 'human':
-            self._get_viewer().loop_once()
+            self._get_viewer().render()
+            # self._get_viewer().loop_once()
 
     def _get_viewer(self):
         if self.viewer is None:
-            self.viewer = mujoco_py_131.MjViewer()
-            self.viewer.start()
-            self.viewer.set_model(self.model)
-            self.viewer_setup()
+            self.viewer = mujoco_py.MjViewer(self.sim)
+            # self.viewer.start()
+            # self.viewer.set_model(self.model)
+            # self.viewer_setup()
         return self.viewer
 
     def get_body_com(self, body_name):
-        idx = self.model.body_names.index(six.b(body_name))
-        return self.model.data.com_subtree[idx]
+        idx = self.model.body_names.index(body_name)
+        return self.sim.data.com_subtree[idx]
 
     def get_body_comvel(self, body_name):
-        idx = self.model.body_names.index(six.b(body_name))
+        idx = self.model.body_names.index(body_name)
         return self.model.body_comvels[idx]
 
     def get_body_xmat(self, body_name):
-        idx = self.model.body_names.index(six.b(body_name))
-        return self.model.data.xmat[idx].reshape((3, 3))
+        idx = self.model.body_names.index(body_name)
+        return self.sim.data.xmat[idx].reshape((3, 3))
 
     def state_vector(self):
         return np.concatenate([
-            self.model.data.qpos.flat,
-            self.model.data.qvel.flat
+            self.sim.data.qpos.flat,
+            self.sim.data.qvel.flat
         ])

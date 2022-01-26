@@ -10,7 +10,7 @@ class KickAndDefend(MultiAgentEnv):
         self._max_episode_steps = max_episode_steps
         self._elapsed_steps = 0
         self.GOAL_REWARD = 1000
-        self.ball_jnt_id = self.env_scene.model.joint_names.index(six.b('ball'))
+        self.ball_jnt_id = self.env_scene.model.joint_names.index('ball')
         self.jnt_nqpos = Agent.JNT_NPOS[int(self.env_scene.model.jnt_type[self.ball_jnt_id])]
         if self.agents[0].team == 'walker':
             self.walker_id = 0
@@ -56,8 +56,8 @@ class KickAndDefend(MultiAgentEnv):
             g1 , g2 = ct.geom1, ct.geom2
             g1 = self.env_scene.model.geom_names[g1]
             g2 = self.env_scene.model.geom_names[g2]
-            if g1.find(six.b('ball')) >= 0:
-                if g2.find(six.b('agent' + str(agent_id))) >= 0:
+            if g1.find('ball') >= 0:
+                if g2.find('agent' + str(agent_id)) >= 0:
                     if ct.dist < 0:
                         contacts.append((g1, g2, ct.dist))
         return contacts

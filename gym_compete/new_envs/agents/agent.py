@@ -83,10 +83,10 @@ class Agent(object):
     #     return self.action_space
 
     def in_scope(self, name):
-        return name.startswith(six.b(self.scope))
+        return name.startswith(self.scope)
 
     def in_agent_scope(self, name, agent_id):
-        return name.startswith(six.b('agent' + str(agent_id)))
+        return name.startswith('agent' + str(agent_id))
 
     def _set_body(self):
         self.body_names = list_filter(
@@ -150,7 +150,7 @@ class Agent(object):
         for i in range(self.n_agents):
             if i == self.id: continue
             startid, endid = self._other_qpos_idx[i]
-            qpos = self.env.model.data.qpos[startid: endid]
+            qpos = self.env.sim.data.qpos[startid: endid]
             other_qpos[i] = qpos
         return other_qpos
 
@@ -165,19 +165,19 @@ class Agent(object):
 
     def get_body_com(self, body_name):
         assert self._env_init, "Env reference is not set"
-        idx = self.body_ids[self.body_names.index(six.b(self.scope + '/' + body_name))]
-        return self.env.model.data.com_subtree[idx]
+        idx = self.body_ids[self.body_names.index(self.scope + '/' + body_name)]
+        return self.env.sim.data.subtree_com[idx]
 
     def get_cfrc_ext(self):
         assert self._env_init, "Env reference is not set"
-        return self.env.model.data.cfrc_ext[self.body_ids]
+        return self.env.sim.data.cfrc_ext[self.body_ids]
 
     def depricated_get_qpos(self):
         qpos = np.zeros((self.nq, 1))
         cnt = 0
         for j, start_idx in enumerate(self.jnt_qposadr):
             jlen = self.jnt_nqpos[j]
-            qpos[cnt: cnt + jlen] = self.env.model.data.qpos[start_idx: start_idx + jlen]
+            qpos[cnt: cnt + jlen] = self.env.sim.data.qpos[start_idx: start_idx + jlen]
             cnt += jlen
         return qpos
 
@@ -186,15 +186,15 @@ class Agent(object):
         Note: this relies on the qpos for one agent being contiguously located
         this is generally true, use depricated_get_qpos if not
         '''
-        return self.env.model.data.qpos[self.qpos_start_idx: self.qpos_end_idx]
+        return self.env.sim.data.qpos[self.qpos_start_idx: self.qpos_end_idx]
 
     def get_other_qpos(self):
         '''
         Note: this relies on the qpos for one agent being contiguously located
         this is generally true, use depricated_get_qpos if not
         '''
-        left_part = self.env.model.data.qpos[:self.qpos_start_idx]
-        right_part = self.env.model.data.qpos[self.qpos_end_idx:]
+        left_part = self.env.sim.data.qpos[:self.qpos_start_idx]
+        right_part = self.env.sim.data.qpos[self.qpos_end_idx:]
         return np.concatenate((left_part, right_part), axis=0)
 
     def get_qvel(self):
@@ -202,28 +202,28 @@ class Agent(object):
         Note: this relies on the qvel for one agent being contiguously located
         this is generally true, follow depricated_get_qpos if not
         '''
-        return self.env.model.data.qvel[self.qvel_start_idx: self.qvel_end_idx]
+        return self.env.sim.data.qvel[self.qvel_start_idx: self.qvel_end_idx]
 
     def get_qfrc_actuator(self):
-        return self.env.model.data.qfrc_actuator[self.qvel_start_idx: self.qvel_end_idx]
+        return self.env.sim.data.qfrc_actuator[self.qvel_start_idx: self.qvel_end_idx]
 
     def get_cvel(self):
-        return self.env.model.data.cvel[self.body_ids]
+        return self.env.sim.data.cvel[self.body_ids]
 
     def get_body_mass(self):
         return self.env.model.body_mass[self.body_ids]
 
     def get_xipos(self):
-        return self.env.model.data.xipos[self.body_ids]
+        return self.env.sim.data.xipos[self.body_ids]
 
     def get_cinert(self):
-        return self.env.model.data.cinert[self.body_ids]
+        return self.env.sim.data.cinert[self.body_ids]
 
     def get_xmat(self):
-        return self.env.model.data.xmat[self.body_ids]
+        return self.env.sim.data.xmat[self.body_ids]
 
     def get_torso_xmat(self):
-        return self.env.model.data.xmat[self.body_ids[self.body_names.index(six.b('agent%d/torso' % self.id))]]
+        return self.env.sim.data.xmat[self.body_ids[self.body_names.index('agent%d/torso' % self.id)]]
 
     # def get_ctrl(self):
     #     return self.env.model.data.ctrl[self.joint_ids]
@@ -234,23 +234,23 @@ class Agent(object):
         '''
         assert any(xyz)
         start = self.qpos_start_idx
-        qpos = self.env.model.data.qpos.flatten().copy()
+        qpos = self.env.sim.data.qpos.flatten().copy()
         if xyz[0]:
             qpos[start] = xyz[0]
         if xyz[1]:
             qpos[start+1] = xyz[1]
         if xyz[2]:
             qpos[start+2] = xyz[2]
-        qvel = self.env.model.data.qvel.flatten()
+        qvel = self.env.sim.data.qvel.flatten()
         self.env.set_state(qpos, qvel)
 
     def set_margin(self, margin):
         agent_geom_ids = [i for i, name in enumerate(self.env.model.geom_names)
                           if self.in_scope(name)]
-        m = self.env.model.geom_margin.copy()
+        m = self.env.sim.geom_margin.copy()
         print("Resetting", self.scope, "margins to", margin)
         m[agent_geom_ids] = margin
-        self.env.model.__setattr__('geom_margin', m)
+        self.env.sim.__setattr__('geom_margin', m)
 
     def reached_goal(self):
         '''
