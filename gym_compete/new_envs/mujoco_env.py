@@ -83,7 +83,8 @@ class MujocoEnv(gym.Env):
         self.sim.reset()
         ob = self.reset_model()
         if self.viewer is not None:
-            self.viewer.autoscale()
+            # Seems like this does not exist anymore in newer mujoco
+            # self.viewer.autoscale()
             self.viewer_setup()
         return ob
 
