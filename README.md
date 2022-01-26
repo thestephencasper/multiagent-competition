@@ -20,6 +20,11 @@ Next install `gym-compete` package as:
 cd gym-compete
 pip install -e .
 ```
+
+Or use pip to install / add to requirements as
+```bash
+gym_compete @ git+https://github.com/PavelCz/multiagent-competition.git@v0.1.0
+```
 Check install is successful by coming out of the directory and trying `import gym_compete` in python console. Some users might require a `sudo pip install`.
 
 ## Trying the environments
