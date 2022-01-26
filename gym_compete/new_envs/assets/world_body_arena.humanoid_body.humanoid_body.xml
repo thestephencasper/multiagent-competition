@@ -2,7 +2,6 @@
   <compiler angle="degree" coordinate="local" inertiafromgeom="true" />
   <option integrator="RK4" iterations="1000" solver="PGS" timestep="0.003" />
   <visual>
-    <quality numarrows="10"/>
     <scale forcewidth="1"/>
     <map force="100"/>
   </visual>
