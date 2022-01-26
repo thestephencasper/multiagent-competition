@@ -26,12 +26,12 @@ class HumanoidKicker(Humanoid):
 
     def get_ball_qpos(self):
         start_idx = int(self.env.model.jnt_qposadr[self.ball_jnt_id])
-        return self.env.model.data.qpos[start_idx:start_idx+self.ball_jnt_nqpos]
+        return self.env.sim.data.qpos[start_idx:start_idx+self.ball_jnt_nqpos]
 
     def get_ball_qvel(self):
         start_idx = int(self.env.model.jnt_dofadr[self.ball_jnt_id])
         # ball has 6 components: 3d translation, 3d rotational
-        return self.env.model.data.qvel[start_idx:start_idx+6]
+        return self.env.sim.data.qvel[start_idx:start_idx+6]
 
     def set_goal(self, goal):
         ball_ini_xyz = self.get_ball_qpos()
