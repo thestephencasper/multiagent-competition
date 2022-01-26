@@ -19,7 +19,7 @@ fi
 if [ $task == "you-shall-not-pass" ] || [ $task == "all" ]
 then
   echo "Task 2: You-Shall-Not-Pass"
-  python main.py --env you-shall-not-pass --param-paths agent-zoo/you-shall-not-pass/agent1_parameters-v1pkl agent-zoo/you-shall-not-pass/agent2_parameters-v1.pkl --max-episodes $max_episodes
+  python main.py --env you-shall-not-pass --param-paths gym_compete/agent_zoo/YouShallNotPassHumans-v0/agent1_parameters-v1.pkl agent-zoo/you-shall-not-pass/agent2_parameters-v1.pkl --max-episodes $max_episodes
 fi
 if [ $task == "sumo-ants" ] || [ $task == "all" ]
 then
