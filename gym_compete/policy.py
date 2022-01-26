@@ -11,7 +11,7 @@ import tensorflow as tf
 
 class RunningMeanStd(object):
     def __init__(self, scope="running", reuse=False, epsilon=1e-2, shape=()):
-        with tf.variable_scope(scope, reuse=reuse):
+        with tf.compat.v1.variable_scope(scope, reuse=reuse):
             # We need these variables to be serialized/deserialized.
             # Stable Baselines reasonably assumes only trainable variables need to be serialized.
             # However, we do not want the optimizer to update these. In principle, we should
@@ -19,33 +19,33 @@ class RunningMeanStd(object):
             # did not include support for this, and since they are unlikely to change much with
             # additional training I have not added support for this.
             # Hack: make them trainable, but use stop_gradients to stop them from being updated.
-            self._sum = tf.stop_gradient(tf.get_variable(
+            self._sum = tf.stop_gradient(tf.compat.v1.get_variable(
                 dtype=tf.float32,
                 shape=shape,
                 initializer=tf.constant_initializer(0.0),
                 name="sum", trainable=True))
-            self._sumsq = tf.stop_gradient(tf.get_variable(
+            self._sumsq = tf.stop_gradient(tf.compat.v1.get_variable(
                 dtype=tf.float32,
                 shape=shape,
                 initializer=tf.constant_initializer(epsilon),
                 name="sumsq", trainable=True))
-            self._count = tf.stop_gradient(tf.get_variable(
+            self._count = tf.stop_gradient(tf.compat.v1.get_variable(
                 dtype=tf.float32,
                 shape=(),
                 initializer=tf.constant_initializer(epsilon),
                 name="count", trainable=True))
             self.shape = shape
 
-            self.mean = tf.to_float(self._sum / self._count)
-            var_est = tf.to_float(self._sumsq / self._count) - tf.square(self.mean)
+            self.mean = tf.compat.v1.to_float(self._sum / self._count)
+            var_est = tf.compat.v1.to_float(self._sumsq / self._count) - tf.square(self.mean)
             self.std = tf.sqrt(tf.maximum(var_est, 1e-2))
 
 
 def dense(x, size, name, weight_init=None, bias=True):
-    w = tf.get_variable(name + "/w", [x.get_shape()[1], size], initializer=weight_init)
+    w = tf.compat.v1.get_variable(name + "/w", [x.get_shape()[1], size], initializer=weight_init)
     ret = tf.matmul(x, w)
     if bias:
-        b = tf.get_variable(name + "/b", [size], initializer=tf.zeros_initializer())
+        b = tf.compat.v1.get_variable(name + "/b", [size], initializer=tf.zeros_initializer())
         return ret + b
     else:
         return ret
@@ -63,8 +63,8 @@ class GymCompetePolicy(ActorCriticPolicy):
         self.action_space = ac_space
 
         with self.sess.graph.as_default():
-            with tf.variable_scope(scope, reuse=reuse):
-                self.scope = tf.get_variable_scope().name
+            with tf.compat.v1.variable_scope(scope, reuse=reuse):
+                self.scope = tf.compat.v1.get_variable_scope().name
 
                 assert isinstance(ob_space, Box)
 
@@ -100,7 +100,7 @@ class GymCompetePolicy(ActorCriticPolicy):
             self.sess.run(op, {theta: params})
 
     def get_trainable_variables(self):
-        return self.sess.graph.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
+        return self.sess.graph.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, self.scope)
 
 
 class MlpPolicyValue(GymCompetePolicy):
@@ -112,7 +112,7 @@ class MlpPolicyValue(GymCompetePolicy):
                          scope=scope, reuse=reuse, normalize=normalize)
         self._initial_state = None
         with self.sess.graph.as_default():
-            with tf.variable_scope(scope, reuse=reuse):
+            with tf.compat.v1.variable_scope(scope, reuse=reuse):
                 def dense_net(prefix, shape):
                     last_out = self.obz
                     ff_outs = []
@@ -130,7 +130,7 @@ class MlpPolicyValue(GymCompetePolicy):
 
                 self._policy, policy_ff_acts = dense_net('pol', ac_space.shape[0])
                 self.ff_out = {'value': value_ff_acts, 'policy': policy_ff_acts}
-                self.logstd = tf.get_variable(name="logstd", shape=[1, ac_space.shape[0]],
+                self.logstd = tf.compat.v1.get_variable(name="logstd", shape=[1, ac_space.shape[0]],
                                               initializer=tf.zeros_initializer())
 
                 self._setup_init()
