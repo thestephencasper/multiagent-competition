@@ -220,10 +220,10 @@ class Agent(object):
         return self.env.sim.data.cinert[self.body_ids]
 
     def get_xmat(self):
-        return self.env.sim.data.xmat[self.body_ids]
+        return self.env.sim.data.body_xmat[self.body_ids]
 
     def get_torso_xmat(self):
-        return self.env.sim.data.xmat[self.body_ids[self.body_names.index('agent%d/torso' % self.id)]]
+        return self.env.sim.data.body_xmat[self.body_ids[self.body_names.index('agent%d/torso' % self.id)]]
 
     # def get_ctrl(self):
     #     return self.env.model.data.ctrl[self.joint_ids]
