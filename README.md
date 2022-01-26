@@ -1,16 +1,17 @@
-**Status:** Archive (code is provided as-is, no updates expected)
-
-# Competitive Multi-Agent Environments
+# Competitive Multi-Agent Environments - Updated
 
 This repository contains the environments for the paper [Emergent Complexity via Multi-agent Competition](https://arxiv.org/abs/1710.03748)
+
+I updated the fork of the original code to be compatible with MuJoCo 2.1 and hopefully newer versions in the future.  
+This code uses my WIP stable-baselines fork which has added support for tf2 (https://github.com/PavelCz/stable-baselines-tf2.git).
 
 ## Dependencies
 Use `pip install -r requirements.txt` to install dependencies. If you haven't used MuJoCo before, please refer to the [installation guide](https://github.com/openai/mujoco-py).
 The code has been tested with the following dependencies:
-* Python version 3.6
-* [OpenAI GYM](https://github.com/openai/gym) version 0.9.1 with MuJoCo 1.31 support (use [mujoco-py version 0.5.7](https://github.com/openai/mujoco-py/tree/0.5))
-* [Tensorflow](https://www.tensorflow.org/versions/r1.1/install/) version 1.1.0
-* [Numpy](https://scipy.org/install.html) version 1.12.1
+* Python version 3.7
+* [OpenAI GYM](https://github.com/openai/gym) version 0.19 with MuJoCo 2.1 support (use mujoco-py version 2.1)
+* [Tensorflow](https://www.tensorflow.org/versions/r1.1/install/) version 2.7.0
+* [Numpy](https://scipy.org/install.html) version 1.21.5
 
 ## Installing Package
 After installing all dependencies, make sure gym works with support for MuJoCo environments.
