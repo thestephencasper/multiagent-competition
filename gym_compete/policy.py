@@ -102,9 +102,6 @@ class GymCompetePolicy(ActorCriticPolicy):
     def get_trainable_variables(self):
         return self.sess.graph.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
 
-    def get_variables(self):
-        return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.scope)
-
 
 class MlpPolicyValue(GymCompetePolicy):
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, hiddens=None,
