@@ -44,7 +44,7 @@ class MultiAgentScene(mujoco_env.MujocoEnv):
         self.viewer.cam.distance = self.model.stat.extent * 0.55
         # self.viewer.cam.distance = self.model.stat.extent * 0.65
         # self.viewer.cam.distance = self.model.stat.extent * 1.5
-        self.viewer.cam.lookat[2] += .8
+        # self.viewer.cam.lookat[2] += .8
         self.viewer.cam.elevation = -10
         # self.viewer.cam.distance = self.model.stat.extent * 0.4
         # self.viewer.cam.lookat[2] += 1.0
