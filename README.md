@@ -3,7 +3,8 @@
 This repository contains the environments for the paper [Emergent Complexity via Multi-agent Competition](https://arxiv.org/abs/1710.03748)
 
 I updated the fork of the original code to be compatible with MuJoCo 2.1 and hopefully newer versions in the future.  
-This code uses my WIP stable-baselines fork which has added support for tf2 (https://github.com/PavelCz/stable-baselines-tf2.git).
+I removed policy.py, which is not needed if you just use the gym_compete environments.
+If you need that module, look at v0.1.0 of this fork, which has a version that was updated to work with tf2, by using my WIP stable-baselines fork which has added support for tf2 (https://github.com/PavelCz/stable-baselines-tf2.git).
 
 ## Dependencies
 Use `pip install -r requirements.txt` to install dependencies. If you haven't used MuJoCo before, please refer to the [installation guide](https://github.com/openai/mujoco-py).
