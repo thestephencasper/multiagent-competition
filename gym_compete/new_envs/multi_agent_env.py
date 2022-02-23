@@ -4,7 +4,6 @@ from .multi_agent_scene import MultiAgentScene
 from .agents import *
 from .utils import create_multiagent_xml
 import os
-import six
 
 class MultiAgentEnv(Env):
     '''

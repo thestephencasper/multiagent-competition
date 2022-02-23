@@ -1,7 +1,6 @@
 from .multi_agent_env import MultiAgentEnv
 import numpy as np
 from gym import spaces
-import six
 
 class SumoEnv(MultiAgentEnv):
     '''

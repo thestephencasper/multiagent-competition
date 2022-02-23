@@ -1,8 +1,5 @@
-from .agent import Agent
 from .ant import Ant
-from gym.spaces import Box
 import numpy as np
-import six
 
 
 def mass_center(mass, xpos):

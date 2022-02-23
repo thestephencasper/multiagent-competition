@@ -1,8 +1,6 @@
 from .humanoid import Humanoid
-from gym.spaces import Box
 import numpy as np
 from .agent import Agent
-import six
 
 
 def mass_center(mass, xpos):
