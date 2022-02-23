@@ -1,7 +1,6 @@
 import numpy as np
-# from gym_compete.new_envs import mujoco_env
 
-from gym_compete.new_envs import mujoco_env
+from gym.envs.mujoco import mujoco_env
 
 class MultiAgentScene(mujoco_env.MujocoEnv):
 
