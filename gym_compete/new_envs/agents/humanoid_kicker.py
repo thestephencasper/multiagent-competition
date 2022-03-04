@@ -40,8 +40,6 @@ class HumanoidKicker(Humanoid):
             self.move_left = True
     
     def after_step(self, action):
-        action = np.clip(action, self.action_space.low, self.action_space.high)
-        # print(action)
         _, done, rinfo = super(HumanoidKicker, self).after_step(action)
         ball_xy = self.get_ball_qpos()[:2]
         my_xy = self.get_qpos()[:2]
