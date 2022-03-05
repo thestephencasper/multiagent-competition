@@ -1,5 +1,7 @@
 import numpy as np
 from gym import Env, spaces
+from mujoco_py import MujocoException
+
 from .multi_agent_scene import MultiAgentScene
 from .agents import *
 from .utils import create_multiagent_xml
@@ -133,12 +135,19 @@ class MultiAgentEnv(Env):
     def step(self, actions):
         for i in range(self.num_agents):
             self.agents[i].before_step()
-        self.env_scene.simulate(actions)
+
+        actions_clipped = [np.clip(a, self.action_space[i].low, self.action_space[i].high) for i, a in enumerate(actions)]
+        actions_clipped = np.nan_to_num(actions_clipped)
+        try:
+            self.env_scene.simulate(actions_clipped)
+        except MujocoException as e:
+            print('Uh-Oh')
+            raise e
         move_rews = []
         infos = []
         dones = []
         for i in range(self.num_agents):
-            move_r, agent_done, rinfo = self.agents[i].after_step(actions[i])
+            move_r, agent_done, rinfo = self.agents[i].after_step(np.nan_to_num(actions[i], nan=100_000_000_000))
             move_rews.append(move_r)
             dones.append(agent_done)
             rinfo['agent_done'] = agent_done
