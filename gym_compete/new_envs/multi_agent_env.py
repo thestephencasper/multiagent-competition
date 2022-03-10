@@ -137,17 +137,13 @@ class MultiAgentEnv(Env):
             self.agents[i].before_step()
 
         actions_clipped = [np.clip(a, self.action_space[i].low, self.action_space[i].high) for i, a in enumerate(actions)]
-        actions_clipped = np.nan_to_num(actions_clipped)
-        try:
-            self.env_scene.simulate(actions_clipped)
-        except MujocoException as e:
-            print('Uh-Oh')
-            raise e
+
+        self.env_scene.simulate(actions_clipped)
         move_rews = []
         infos = []
         dones = []
         for i in range(self.num_agents):
-            move_r, agent_done, rinfo = self.agents[i].after_step(np.nan_to_num(actions[i], nan=100_000_000_000))
+            move_r, agent_done, rinfo = self.agents[i].after_step(actions[i])
             move_rews.append(move_r)
             dones.append(agent_done)
             rinfo['agent_done'] = agent_done
