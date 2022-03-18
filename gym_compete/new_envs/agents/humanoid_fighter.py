@@ -1,8 +1,5 @@
-from .agent import Agent
 from .humanoid import Humanoid
-from gym.spaces import Box
 import numpy as np
-import six
 
 
 def mass_center(mass, xpos):
@@ -24,7 +21,6 @@ class HumanoidFighter(Humanoid):
         self.arena_height = self.env.model.geom_size[self.arena_id][1] * 2
 
     def after_step(self, action):
-        action = np.clip(action, self.action_space.low, self.action_space.high)
         ctrl_cost = .1 * np.square(action).sum()
         cfrc_ext = self.get_cfrc_ext()
         contact_cost = .5e-6 * np.square(cfrc_ext).sum()

@@ -20,7 +20,6 @@ class HumanoidGoalKeeper(HumanoidKicker):
         pass
 
     def after_step(self, action):
-        action = np.clip(action, self.action_space.low, self.action_space.high)
         forward_reward = 0.
         ctrl_cost = .1 * np.square(action).sum()
         cfrc_ext = self.get_cfrc_ext()

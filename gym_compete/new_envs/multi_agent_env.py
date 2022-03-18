@@ -1,10 +1,11 @@
 import numpy as np
 from gym import Env, spaces
+from mujoco_py import MujocoException
+
 from .multi_agent_scene import MultiAgentScene
 from .agents import *
 from .utils import create_multiagent_xml
 import os
-import six
 
 class MultiAgentEnv(Env):
     '''
@@ -134,6 +135,7 @@ class MultiAgentEnv(Env):
     def step(self, actions):
         for i in range(self.num_agents):
             self.agents[i].before_step()
+
         self.env_scene.simulate(actions)
         move_rews = []
         infos = []

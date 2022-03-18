@@ -1,8 +1,6 @@
 from .multi_agent_env import MultiAgentEnv
 import numpy as np
 from .agents import Agent
-import six
-from gym import spaces
 
 class KickAndDefend(MultiAgentEnv):
     def __init__(self, max_episode_steps=500, randomize_ball=True, **kwargs):

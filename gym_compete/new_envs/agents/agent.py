@@ -1,6 +1,5 @@
 import xml.etree.ElementTree as ET
 from gym.spaces import Box
-import six
 from ..utils import list_filter
 import numpy as np
 
