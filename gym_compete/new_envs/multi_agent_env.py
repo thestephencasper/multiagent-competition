@@ -136,9 +136,7 @@ class MultiAgentEnv(Env):
         for i in range(self.num_agents):
             self.agents[i].before_step()
 
-        actions_clipped = [np.clip(a, self.action_space[i].low, self.action_space[i].high) for i, a in enumerate(actions)]
-
-        self.env_scene.simulate(actions_clipped)
+        self.env_scene.simulate(actions)
         move_rews = []
         infos = []
         dones = []
