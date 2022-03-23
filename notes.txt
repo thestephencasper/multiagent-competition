@@ -1,0 +1,120 @@
+# TODO
+get train_mc_agents.py to work
+make a wrapper or subclass of the environments in which an agent is fixed or something
+make a vectorized env with baselines3
+train victims
+make versions of the environment in which a victim model is used
+
+# repos
+https://github.com/PavelCz/multiagent-competition/tree/master/gym_compete
+https://github.com/HumanCompatibleAI/adversarial-policies
+https://github.com/openai/multiagent-competition
+
+# ssh
+ssh scasper@satori-login-001.mit.edu
+
+# interactive on supercloud
+LLsub -i -s 8 -g volta:1
+LLsub -i -s 8
+
+# make env on supercloud
+module load anaconda/2022a
+conda create -y -c menpo -n mac python=3.8 libglvnd-glx-cos7-x86_64 mesa-libgl-devel-cos6-x86_64 glfw3 tensorflow-gpu
+conda activate mac
+pip install --user scipy matplotlib
+git clone https://github.com/PavelCz/multiagent-competition.git
+cd /home/gridsan/scasper/multiagent-competition
+pip install -e .
+cd
+conda install -y tensorflow-gpu patchelf stable-baselines3
+mkdir .mujoco
+cd .mujoco
+wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
+tar -vxf *.gz
+mkdir /state/partition1/user/scasper/
+cd /state/partition1/user/scasper/
+git clone https://github.com/openai/mujoco-py.git
+cd mujoco-py
+python setup.py install --user
+cd ..
+mv mujoco-py ~
+
+# and then to load it or whatever in a script
+cd
+module load anaconda/2022a
+module load cuda/10.0
+conda activate mac
+rm -r -f /state/partition1/user/scasper/
+mkdir /state/partition1/user/scasper/
+cd /state/partition1/user/scasper/
+cp -r ~/mujoco-py .
+cd mujoco-py
+python setup.py install
+python -c 'import mujoco_py'
+
+
+
+
+
+
+
+
+
+
+
+##########
+# OLD
+##########
+
+
+
+
+
+
+
+
+# image setup and such
+module load singularity
+singularity build ap.sif docker://liqingya/mujoco:py36-torch1.4-tf1.14-cu100
+update mujoco
+download mujoco
+singularity exec --env LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/scasper/.mujoco/mujoco210/bin ap.sif python
+
+
+# how to put up a docker container with ppc64le
+https://mit-satori.github.io/tips-and-tricks/singularity-tips/index.html
+
+# make container
+sudo docker build --platform ppc64le --no-cache --tag stecas/adv_policies:v0 .
+
+# Dockerfile gfootball
+FROM ibmcom/tensorflow-ppc64le:latest-py3
+ENV LC_ALL C.UTF-8
+ENV LANG C.UTF-8
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && \
+	apt-get install -y libosmesa6-dev libgl1-mesa-glx libglfw3 && \
+	apt-get update
+RUN python3 -m pip install --upgrade pip setuptools
+RUN python3 -m pip install numpy gym scipy matplotlib
+RUN python3 -m pip install mujoco-py<2.2,>=2.1
+
+
+
+# build sif
+# locally
+cd ~/singularity-vm
+vagrant up ; vagrant ssh
+sudo apt-get update
+# install singularity from these instructions for latest: https://sylabs.io/guides/latest/user-guide/quick_start.html or for 2.6: https://sylabs.io/guides/2.6/user-guide/installation.html
+# cd
+singularity --version
+# make the ap_sing.def file
+sudo singularity build ap.sif ap_sing.def
+singularity exec ap.sif pip list ; singularity exec ap.sif python -V
+exit
+vagrant scp :/home/vagranlst/ap.sif .
+vagrant halt
+scp ap.sif scasper@satori-login-001.mit.edu:/home/scasper/ap
+
+
