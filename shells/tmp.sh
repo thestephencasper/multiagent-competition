@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -n 1
 #SBATCH -N 1
-#SBATCH --mem=16GB
+#SBATCH --mem=4GB
 #SBATCH --chdir=/home/gridsan/scasper/multiagent-competition/outfiles
 #SBATCH --job-name=tmp
 #SBATCH --gres=gpu:volta:1
@@ -19,9 +19,8 @@ cp -r ~/multiagent-competition .
 cd mujoco-py
 python setup.py install
 python -c 'import mujoco_py'
-cp -r mujoco_py ../multiagent-competition
-cd ../multiagent-competition
+cp -r mujoco_py ../multiagent-competition/
+cd ../multiagent-competition/
 python -c 'import mujoco_py'
-
-
+python train_mc_agents.py --env=run-to-goal-ants
 

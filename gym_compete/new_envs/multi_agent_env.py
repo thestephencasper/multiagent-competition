@@ -1,5 +1,7 @@
 import numpy as np
 from gym import Env, spaces
+import sys
+sys.path.append('~/multiagent-competition/')
 from mujoco_py import MujocoException
 
 from .multi_agent_scene import MultiAgentScene

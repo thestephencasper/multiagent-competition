@@ -1,14 +1,83 @@
 # TODO
-get train_mc_agents.py to work
-make a wrapper or subclass of the environments in which an agent is fixed or something
-make a vectorized env with baselines3
-train victims
+train victims round robin
 make versions of the environment in which a victim model is used
 
 # repos
 https://github.com/PavelCz/multiagent-competition/tree/master/gym_compete
 https://github.com/HumanCompatibleAI/adversarial-policies
 https://github.com/openai/multiagent-competition
+
+# ssh
+ssh scasper@align-2.csail.mit.edu
+
+# env
+source ~/mc_env/bin/activate
+
+# tmux and screen
+tmux new -s session_name
+tmux attach-session -t session_name
+kinit && aklog
+tmux ls
+tmux kill-ses -t session_name
+screen -S session_name
+screen -r session_name
+screen -X -S session_name quit
+ctrl+a d
+
+# .bashrc
+export PS1="\e[0;32m\u@\h\e\e[0;37m:\e\e[0;34m\W\e\e[0;37m$\e[m "
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/afs/csail.mit.edu/u/s/scasper/.mujoco/mujoco210/bin
+alias mac="cd ~/multiagent-competition/"
+alias python="python3"
+export CUDA_PATH=/usr
+function tns(){
+        tmux new -s $1
+}
+function tas() {
+    tmux attach-session -t $1
+}
+
+# cuda
+# https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html
+# https://developer.nvidia.com/cuda-11-3-1-download-archive
+sudo apt update
+sudo apt-get install linux-headers-$(uname -r)
+curl -O https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+sudo mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+wget https://developer.download.nvidia.com/compute/cuda/11.3.1/local_installers/cuda-repo-ubuntu2004-11-3-local_11.3.1-465.19.01-1_amd64.deb
+sudo dpkg -i cuda-repo-ubuntu2004-11-3-local_11.3.1-465.19.01-1_amd64.deb
+sudo apt-key add /var/cuda-repo-ubuntu2004-11-3-local/7fa2af80.pub
+sudo apt-get update  # might need to sudo rm something if it can't be parsed
+sudo reboot
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # ssh
 ssh scasper@satori-login-001.mit.edu
@@ -18,15 +87,14 @@ LLsub -i -s 8 -g volta:1
 LLsub -i -s 8
 
 # make env on supercloud
-module load anaconda/2022a
-conda create -y -c menpo -n mac python=3.8 libglvnd-glx-cos7-x86_64 mesa-libgl-devel-cos6-x86_64 glfw3 tensorflow-gpu
-conda activate mac
-pip install --user scipy matplotlib
-git clone https://github.com/PavelCz/multiagent-competition.git
-cd /home/gridsan/scasper/multiagent-competition
-pip install -e .
 cd
-conda install -y tensorflow-gpu patchelf stable-baselines3
+module load anaconda/2022a
+conda create -y -c menpo -n mac python=3.8 libglvnd-glx-cos7-x86_64 mesa-libgl-devel-cos6-x86_64 glfw3
+conda activate mac
+mkdir /state/partition1/user/$USER
+export TMPDIR=/state/partition1/user/$USER
+pip install patchelf stable-baselines3 numpy gym scipy matplotlib torch Cython mujoco>=2.1
+rm -rf /state/partition1/user/$USER
 mkdir .mujoco
 cd .mujoco
 wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
@@ -55,66 +123,5 @@ python -c 'import mujoco_py'
 
 
 
-
-
-
-
-
-
-
-##########
-# OLD
-##########
-
-
-
-
-
-
-
-
-# image setup and such
-module load singularity
-singularity build ap.sif docker://liqingya/mujoco:py36-torch1.4-tf1.14-cu100
-update mujoco
-download mujoco
-singularity exec --env LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/scasper/.mujoco/mujoco210/bin ap.sif python
-
-
-# how to put up a docker container with ppc64le
-https://mit-satori.github.io/tips-and-tricks/singularity-tips/index.html
-
-# make container
-sudo docker build --platform ppc64le --no-cache --tag stecas/adv_policies:v0 .
-
-# Dockerfile gfootball
-FROM ibmcom/tensorflow-ppc64le:latest-py3
-ENV LC_ALL C.UTF-8
-ENV LANG C.UTF-8
-ARG DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && \
-	apt-get install -y libosmesa6-dev libgl1-mesa-glx libglfw3 && \
-	apt-get update
-RUN python3 -m pip install --upgrade pip setuptools
-RUN python3 -m pip install numpy gym scipy matplotlib
-RUN python3 -m pip install mujoco-py<2.2,>=2.1
-
-
-
-# build sif
-# locally
-cd ~/singularity-vm
-vagrant up ; vagrant ssh
-sudo apt-get update
-# install singularity from these instructions for latest: https://sylabs.io/guides/latest/user-guide/quick_start.html or for 2.6: https://sylabs.io/guides/2.6/user-guide/installation.html
-# cd
-singularity --version
-# make the ap_sing.def file
-sudo singularity build ap.sif ap_sing.def
-singularity exec ap.sif pip list ; singularity exec ap.sif python -V
-exit
-vagrant scp :/home/vagranlst/ap.sif .
-vagrant halt
-scp ap.sif scasper@satori-login-001.mit.edu:/home/scasper/ap
 
 
