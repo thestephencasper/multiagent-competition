@@ -1,6 +1,9 @@
 # TODO
+# google doc: bashrc, venv, tmux, storing things locally on the machines themselves
 train victims round robin
-make versions of the environment in which a victim model is used
+visualize victims
+train a baseline attacker
+train white box attackers: act/value, latents, both
 
 # repos
 https://github.com/PavelCz/multiagent-competition/tree/master/gym_compete
@@ -11,11 +14,19 @@ https://github.com/openai/multiagent-competition
 ssh scasper@align-2.csail.mit.edu
 
 # env
+python -m venv ~/mc_env
 source ~/mc_env/bin/activate
+python -m pip install patchelf numpy gym scipy matplotlib Cython mujoco>=2.1
+python -m pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cu113
+python -m pip install git+https://github.com/Stable-Baselines-Team/stable-baselines3-contrib.git@feat/ppo-lstm
+
 
 # tmux and screen
 tmux new -s session_name
 tmux attach-session -t session_name
+Ctrl+b c  # create window
+Ctrl+b p  # previous window
+Ctrl+b n  # next window
 kinit && aklog
 tmux ls
 tmux kill-ses -t session_name
@@ -30,6 +41,12 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/afs/csail.mit.edu/u/s/scasper/.mujoco/m
 alias mac="cd ~/multiagent-competition/"
 alias python="python3"
 export CUDA_PATH=/usr
+export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libGLEW.so
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia-000
+# export PATH=/usr/local/cuda-11.6/bin${PATH:+:${PATH}}
+# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia
+# export LD_LIBRARY_PATH=/usr/local/cuda-11.3/lib:$LD_LIBRARY_PATH
+# export PATH=/usr/local/cuda-11.3/bin:$PATH
 function tns(){
         tmux new -s $1
 }
@@ -37,7 +54,7 @@ function tas() {
     tmux attach-session -t $1
 }
 
-# cuda
+# cuda and stuff
 # https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html
 # https://developer.nvidia.com/cuda-11-3-1-download-archive
 sudo apt update
@@ -49,6 +66,13 @@ sudo dpkg -i cuda-repo-ubuntu2004-11-3-local_11.3.1-465.19.01-1_amd64.deb
 sudo apt-key add /var/cuda-repo-ubuntu2004-11-3-local/7fa2af80.pub
 sudo apt-get update  # might need to sudo rm something if it can't be parsed
 sudo reboot
+
+# mujoco and baselines stuff
+sudo apt-get install ffmpeg
+sudo mkdir -p /usr/lib/nvidia-000
+sudo apt-get install libglfw3
+sudo apt-get install libglfw3-dev
+
 
 
 
@@ -119,9 +143,6 @@ cp -r ~/mujoco-py .
 cd mujoco-py
 python setup.py install
 python -c 'import mujoco_py'
-
-
-
 
 
 
