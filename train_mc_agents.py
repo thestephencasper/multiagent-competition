@@ -10,7 +10,6 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 from gym_compete.utils import parse_args, POLICY_KWARGS
 from gym_compete.envs import make_env, get_env_and_policy, simple_eval
 
-
 if __name__ == '__main__':
 
     freeze_support()
