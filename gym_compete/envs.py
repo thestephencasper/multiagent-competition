@@ -10,6 +10,7 @@ from gym_compete.utils import POLICY_KWARGS
 # sys.path.append(os.path.abspath('..'))
 
 
+# TODO make this a subclass of gym.Wrapper
 class EnvWrapper:
     # for training one agent as opposed to two
     def __init__(self, env, ta_i, fixed_agent_checkpoint, policy_alg, args):

@@ -180,8 +180,8 @@ class MultiAgentEnv(Env):
     def dt(self):
         return self.env_scene.dt
 
-    def render(self, mode='human', close=False):
-        return self.env_scene.render(mode, close)
+    def render(self, mode='human'):
+        return self.env_scene.render(mode)
 
     def state_vector(self):
         return self.env_scene.state_vector()
