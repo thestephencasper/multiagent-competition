@@ -10,8 +10,7 @@ from gym_compete.utils import POLICY_KWARGS
 # sys.path.append(os.path.abspath('..'))
 
 
-# TODO make this a subclass of gym.Wrapper
-class EnvWrapper:
+class EnvWrapper(gym.Wrapper):
     # for training one agent as opposed to two
     def __init__(self, env, ta_i, fixed_agent_checkpoint, policy_alg, args):
         self.env = env
@@ -20,19 +19,17 @@ class EnvWrapper:
         self.observation_space = self.env.observation_space[self.ta_i]
         self.action_space = self.env.action_space[self.ta_i]
         self.observations = None
-        self.spec = self.env.spec
 
+        eos = copy.copy(self.env.observation_space)
+        eas = copy.copy(self.env.action_space)
+        self.env.observation_space = eos[1 - self.ta_i]
+        self.env.action_space = eas[1 - self.ta_i]
+        net_type = 'MlpPolicy' if policy_alg == PPO else 'MlpLstmPolicy'
+        self.fixed_agent = policy_alg(net_type, self.env, ent_coef=args.ent_coef, policy_kwargs=POLICY_KWARGS)
+        self.env.observation_space = eos
+        self.env.action_space = eas
         if fixed_agent_checkpoint:
-            self.fixed_agent = policy_alg.load(args.model_dir + fixed_agent_checkpoint)
-        else:
-            eos = copy.copy(self.env.observation_space)
-            eas = copy.copy(self.env.action_space)
-            self.env.observation_space = eos[1 - self.ta_i]
-            self.env.action_space = eas[1 - self.ta_i]
-            net_type = 'MlpPolicy' if policy_alg == PPO else 'MlpLstmPolicy'
-            self.fixed_agent = policy_alg(net_type, self.env, ent_coef=args.ent_coef, policy_kwargs=POLICY_KWARGS)
-            self.env.observation_space = eos
-            self.env.action_space = eas
+            self.fixed_agent.set_parameters(load_path_or_dict=(args.model_dir + fixed_agent_checkpoint))
 
     def step(self, action):
         fixed_action = self.fixed_agent.predict(observation=self.observations[1 - self.ta_i], deterministic=False)[0]
@@ -44,11 +41,6 @@ class EnvWrapper:
         self.observations = self.env.reset()
         return self.observations[self.ta_i]
 
-    def render(self, *args, **kwargs):
-        return self.env.render(*args, **kwargs)
-
-    def close(self):
-        return self.env.close()
 
 
 def make_env(env_id, fac, policy_alg, args, rank, seed=0):

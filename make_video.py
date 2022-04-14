@@ -24,23 +24,39 @@ if __name__ == '__main__':
     device = 'cpu'
 
     env_type, policy_alg = get_env_and_policy(args.env)
-    env = DummyVecEnv([make_env(env_type, fac, policy_alg, args, 0)])
-    # env = Monitor(make_env(env_type, fac, policy_alg, args, 0)(), './video', force=True)
+    env = make_env(env_type, fac, policy_alg, args, 0)()
+    vr = VideoRecorder(env, f'./video/{args.agent0_ckpt}_vs_{args.agent1_ckpt}.mp4', enabled=True)
     net_type = 'MlpPolicy' if policy_alg == PPO else 'MlpLstmPolicy'
     policy = policy_alg(net_type, env, ent_coef=args.ent_coef, policy_kwargs=POLICY_KWARGS,
                         batch_size=args.batch_size, n_epochs=args.n_epochs, device=device)
-    policy.set_parameters(load_path_or_dict=(args.model_dir + tac), device=device)
+    policy.set_parameters(load_path_or_dict=(args.model_dir + tac))
 
     video_folder = './video/'
-    video_len = 100
-    _ = env.reset()
-    env = VecVideoRecorder(env, video_folder, record_video_trigger=lambda x: x == 0, video_length=video_len,
-                           name_prefix=args.agent0_ckpt + '_vs_' + args.agent1_ckpt)
-    obs = env.unwrapped.reset()
-    for _ in range(video_len + 1):
+    obs = env.reset()
+    for _ in range(250 + 1):
+        vr.capture_frame()
         action = policy.predict(observation=obs, deterministic=False)[0]
-        obs, _, _, _ = env.step(action)
+        obs, _, done, _ = env.step(action)
+        if done:
+            obs = env.reset()
+    vr.close()
     env.close()
+
+    # # this does not work
+    # # env_id = 'CartPole-v1'
+    # env_id = 'Ant-v2'
+    # env = gym.make(env_id)
+    # vr = VideoRecorder(env, './video/tmp.mp4', enabled=True)
+    # obs = env.reset()
+    # done = False
+    # while not done:
+    #     env.unwrapped.render()  # env.unwrapped.render()
+    #     vr.capture_frame()
+    #     action = env.action_space.sample()
+    #     _, _, done, _ = env.step(action)
+    # vr.close()
+    # vr.enabled = False
+    # env.close()
 
     # # this works
     # # env_id = 'CartPole-v1'
@@ -66,22 +82,6 @@ if __name__ == '__main__':
     # while not done:
     #     action = env.action_space.sample()
     #     _, _, done, _ = env.step(action)
-    # env.close()
-
-    # # this does not work
-    # # env_id = 'CartPole-v1'
-    # env_id = 'Ant-v2'
-    # env = gym.make(env_id)
-    # vr = VideoRecorder(env, './video/tmp.mp4', enabled=True)
-    # obs = env.reset()
-    # done = False
-    # while not done:
-    #     env.unwrapped.render()  # env.unwrapped.render()
-    #     vr.capture_frame()
-    #     action = env.action_space.sample()
-    #     _, _, done, _ = env.step(action)
-    # vr.close()
-    # vr.enabled = False
     # env.close()
 
     # # this works
