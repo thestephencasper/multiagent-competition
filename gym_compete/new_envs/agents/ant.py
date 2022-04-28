@@ -65,7 +65,7 @@ class Ant(Agent):
         self.obs_dim = obs.size
         high = np.inf * np.ones(self.obs_dim)
         low = -high
-        self.observation_space = Box(low, high)
+        self.observation_space = Box(np.float32(low), np.float32(high))
 
     def reached_goal(self):
         xpos = self.get_body_com('torso')[0]

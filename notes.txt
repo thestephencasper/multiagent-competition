@@ -1,7 +1,8 @@
 # TODO
 # google doc: bashrc, venv, tmux, storing things locally on the machines themselves
-train victims round robin
-visualize victims
+train victims
+    Wtf is going on if I can't get anything to train using SB2 and tf.
+    Note that I have not installed cuda 10.0, so all of my sb2 stuff is fully on CPU.
 train a baseline attacker
 train white box attackers: act/value, latents, both
 
@@ -20,6 +21,9 @@ source ~/mc_env/bin/activate
 python -m pip install patchelf numpy gym==0.19.0 scipy matplotlib Cython pyglet stable-baselines3 'mujoco-py>=2.1'
 python -m pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cu113
 python -m pip install git+https://github.com/Stable-Baselines-Team/stable-baselines3-contrib.git@feat/ppo-lstm
+python -m pip install tensorflow-gpu==1.15.0
+python -m pip install git+https://github.com/hill-a/stable-baselines.git@6fbc9a9
+python -m pip install git+https://github.com/HumanCompatibleAI/baselines.git@f70377
 
 # tmux and screen
 tmux new -s session_name
@@ -69,15 +73,23 @@ sudo mv cuda-ubuntu2004-11-3-local.pin /etc/apt/preferences.d/cuda-repository-pi
 sudo apt-get update  # might need to sudo rm something if it can't be parsed
 sudo apt-get -y install cuda
 sudo reboot
-sudo apt-get install g++ freeglut3-dev build-essential libx11-dev libxmu-dev libxi-dev libglu1-mesa libglu1-mesa-dev libfreeimage-dev libosmesa6-dev libgl1-mesa-glx libglfw3 ffmpeg
+sudo apt-get install g++ freeglut3-dev build-essential libx11-dev libxmu-dev libxi-dev libglu1-mesa libglu1-mesa-dev \
+libfreeimage-dev libosmesa6-dev libgl1-mesa-glx libglfw3 ffmpeg libglew-dev
+sudo apt-get update && sudo apt-get install cmake libopenmpi-dev python3-dev zlib1g-dev  # for baselines 2
 update-alternatives --display cuda  # check the version
+
+# python 3.7
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt update -y && sudo apt install python3.7 python3.7-venv python3.7-dev
+
 
 # vagrant box
 cd ~/mc-vm
-vagrant up
-vagrant ssh
+vagrant up ; vagrant ssh
 sudo apt update
-sudo apt install g++ freeglut3-dev build-essential libx11-dev libxmu-dev libxi-dev libglu1-mesa libglu1-mesa-dev libfreeimage-dev libosmesa6-dev libgl1-mesa-glx libglfw3 software-properties-common libglfw3-dev ffmpeg software-properties-common xvfb
+sudo apt install g++ freeglut3-dev build-essential libx11-dev libxmu-dev libxi-dev libglu1-mesa libglu1-mesa-dev \
+libfreeimage-dev libosmesa6-dev libgl1-mesa-glx libglfw3 software-properties-common libglfw3-dev \
+ffmpeg software-properties-common xvfb
 sudo add-apt-repository ppa:deadsnakes/ppa
 sudo apt install python3.8 python3.8-venv python3.8-dev
 sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.6 1
@@ -100,3 +112,72 @@ cd
 # add to bashrc
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/vagrant/.mujoco/mujoco210/bin
 
+
+
+
+
+
+
+
+
+
+
+
+# hypers
+
+LR
+Bansal: 0.001
+Gleave: 0.0003
+ME: 0.0003 earlier, 0.0005 now
+
+Epoch size
+Bansal: 409600
+Gleave: 16384
+Me: n_steps=2048 * n_envs
+
+Batch size
+Bansal: 5120
+Gleave: 4096
+ME 4096 earlier, 8192 now
+
+Epochs
+Bansal: 6 for MLP and 3 for LSTM
+Gleave: 4
+ME: 4
+
+L2 WD
+Bansal: unspecified but annealed to zero
+Gleave: 0
+ME: 0
+
+Opponent sampling
+Bansal: Sampling from the last half of the opponents, training against ensemble
+Gleave: None
+ME: trying to emulate bansal by sampling from last half of opponents
+
+Initialization
+Bansal: slightly random at first and then more later
+Gleave: same each time
+ME: same each time
+
+N envs
+Bansal: Unspecified
+Gleave: 8
+Me: like 64
+
+Max Grad Norm
+Bansal: None, Others, 0.5
+Value loss coef
+Bansal: None, Others, 0.5
+Gamma
+Bansal and me: 0.995, Gleave: 0.99
+Optimizer
+All: Adam
+Clip
+All: 0.2
+GAE-Lambda
+All: 0.95
+Entropy
+All: 0
+Network
+All: MLP 128 128, LSTM 128 extractor and 128 internal

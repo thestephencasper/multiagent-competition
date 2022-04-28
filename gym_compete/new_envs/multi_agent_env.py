@@ -67,7 +67,7 @@ class MultiAgentEnv(Env):
             agent_args = [{} for _ in range(self.num_agents)]
         assert len(agent_args) == self.num_agents, "Incorrect length of agent_args"
         for i, name in enumerate(agent_names):
-            print("Creating agent", name)
+            # print("Creating agent", name)
             agent_xml_path, agent_class = agent_map[name]
             self.agents[i] = agent_class(i, agent_xml_path, **agent_args[i])
             all_agent_xml_paths.append(agent_xml_path)
@@ -76,17 +76,17 @@ class MultiAgentEnv(Env):
         if scene_xml_path is not None and os.path.exists(scene_xml_path):
             self._env_xml_path = scene_xml_path
         else:
-            print("Creating Scene XML")
-            print(init_pos)
+            # print("Creating Scene XML")
+            # print(init_pos)
             _, self._env_xml_path = create_multiagent_xml(
                 world_xml_path, all_agent_xml_paths, agent_scopes,
                 # outdir=os.path.join(os.path.dirname(__file__), "assets"),
                 outpath=scene_xml_path,
                 ini_pos=init_pos, rgb=rgb
             )
-        print("Scene XML path:", self._env_xml_path)
+        # print("Scene XML path:", self._env_xml_path)
         self.env_scene = MultiAgentScene(self._env_xml_path, self.num_agents)
-        print("Created Scene with agents")
+        # print("Created Scene with agents")
         for i, agent in self.agents.items():
             agent.set_env(self.env_scene)
         self._set_observation_space()

@@ -2,9 +2,10 @@ import sys
 import copy
 import gym
 from stable_baselines3.ppo import PPO
-from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.utils import set_random_seed
-from gym_compete.utils import POLICY_KWARGS
+from sb3_contrib import RecurrentPPO
+# from stable_baselines import PPO2
+from gym_compete.utils import POLICY_KWARGS_MLP, POLICY_KWARGS_LSTM
 
 # sys.path.append(os.getcwd())
 # sys.path.append(os.path.abspath('..'))
@@ -12,7 +13,7 @@ from gym_compete.utils import POLICY_KWARGS
 
 class EnvWrapper(gym.Wrapper):
     # for training one agent as opposed to two
-    def __init__(self, env, ta_i, fixed_agent_checkpoint, policy_alg, args):
+    def __init__(self, env, ta_i, fixed_agent_checkpoint, policy_alg, net_type, policy_kwargs, args):
         self.env = env
         self.metadata = self.env.metadata
         self.ta_i = ta_i
@@ -24,12 +25,19 @@ class EnvWrapper(gym.Wrapper):
         eas = copy.copy(self.env.action_space)
         self.env.observation_space = eos[1 - self.ta_i]
         self.env.action_space = eas[1 - self.ta_i]
-        net_type = 'MlpPolicy' if policy_alg == PPO else 'MlpLstmPolicy'
-        self.fixed_agent = policy_alg(net_type, self.env, ent_coef=args.ent_coef, policy_kwargs=POLICY_KWARGS)
+        if args.use_sb3:
+            self.fixed_agent = policy_alg(net_type, self.env, policy_kwargs=policy_kwargs, device='cpu')
+            if fixed_agent_checkpoint:
+                self.fixed_agent.set_parameters(load_path_or_dict=(args.model_dir + fixed_agent_checkpoint),
+                                                device='cpu')
+        else:
+            raise NotImplementedError
+            # if fixed_agent_checkpoint:
+            #     self.fixed_agent = policy_alg.load(load_path_or_dict=(args.model_dir + fixed_agent_checkpoint))
+            # else:
+            #     self.fixed_agent = policy_alg(net_type, self.env, policy_kwargs=policy_kwargs)
         self.env.observation_space = eos
         self.env.action_space = eas
-        if fixed_agent_checkpoint:
-            self.fixed_agent.set_parameters(load_path_or_dict=(args.model_dir + fixed_agent_checkpoint))
 
     def step(self, action):
         fixed_action = self.fixed_agent.predict(observation=self.observations[1 - self.ta_i], deterministic=False)[0]
@@ -42,11 +50,10 @@ class EnvWrapper(gym.Wrapper):
         return self.observations[self.ta_i]
 
 
-
-def make_env(env_id, fac, policy_alg, args, rank, seed=0):
+def make_env(env_id, fac, policy_alg, net_type, policy_kwargs, args, rank, seed=0):
     # for subproc vec env
     def _init():
-        env = EnvWrapper(gym.make(env_id), args.ta_i, fac, policy_alg, args)
+        env = EnvWrapper(gym.make(env_id), args.ta_i, fac, policy_alg, net_type, policy_kwargs, args)
         env.env.seed(seed + rank)
         return env
 
@@ -73,34 +80,37 @@ def simple_eval(policy, eval_env, n_episodes):
     return sum(all_rewards) / n_episodes
 
 
-def get_env_and_policy(env_key):
+def get_env_and_policy(env_key, use_sb3):
     if env_key == 'kick-and-defend':
         # asymmetric
         env_type = 'multicomp/KickAndDefend-v0'
-        policy = RecurrentPPO
-    # elif env_key == 'run-to-goal-humans':
-    #     # symmetric, not done by Gleave
-    #     env_type = 'multicomp/RunToGoalHumans-v0'
-    #     policy = PPO
-    # elif env_key == 'run-to-goal-ants':
-    #     # symmetric, not done by Gleave
-    #     env_type = 'multicomp/RunToGoalAnts-v0'
-    #     policy = PPO
+        policy = RecurrentPPO if use_sb3 else None  # PPO2
+        policy_kwargs = POLICY_KWARGS_LSTM
+        net_type = 'MlpLstmPolicy'
     elif env_key == 'you-shall-not-pass':
         # asymmetric
         env_type = 'multicomp/YouShallNotPassHumans-v0'
-        policy = PPO
+        policy = PPO if use_sb3 else None  # PPO2
+        policy_kwargs = POLICY_KWARGS_MLP
+        net_type = 'MlpPolicy'
+        # policy = RecurrentPPO if use_sb3 else None  # PPO2
+        # policy_kwargs = POLICY_KWARGS_LSTM
+        # net_type = 'MlpLstmPolicy'
     elif env_key == 'sumo-humans':
         # symmetric
         env_type = 'multicomp/SumoHumans-v0'
-        policy = RecurrentPPO
+        policy = RecurrentPPO if use_sb3 else None  # PPO2
+        policy_kwargs = POLICY_KWARGS_LSTM
+        net_type = 'MlpLstmPolicy'
     elif env_key == 'sumo-ants':
         # symmetric
         env_type = 'multicomp/SumoAnts-v0'
-        policy = RecurrentPPO
+        policy = RecurrentPPO if use_sb3 else None  # PPO2
+        policy_kwargs = POLICY_KWARGS_LSTM
+        net_type = 'MlpLstmPolicy'
     else:
         print('unsupported environment')
-        print(
-            'must be: run-to-goal-humans, run-to-goal-ants, you-shall-not-pass, sumo-humans, sumo-ants, kick-and-defend')
+        print('valid: run-to-goal-humans, run-to-goal-ants, you-shall-not-pass, '
+              'sumo-humans, sumo-ants, kick-and-defend')
         sys.exit()
-    return env_type, policy
+    return env_type, policy, policy_kwargs, net_type

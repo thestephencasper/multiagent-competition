@@ -23,7 +23,7 @@ class Agent(object):
         self.id = agent_id
         self.scope = 'agent' + str(self.id)
         self._xml_path = xml_path
-        print("Reading agent XML from:", xml_path)
+        # print("Reading agent XML from:", xml_path)
         self.xml = ET.parse(xml_path)
         self.env = None
         self._env_init = False
@@ -44,7 +44,7 @@ class Agent(object):
         self.obs_dim = obs.size
         high = np.inf * np.ones(self.obs_dim)
         low = -high
-        self.observation_space = Box(low, high)
+        self.observation_space = Box(np.float32(low), np.float32(high))
 
     def set_action_space(self):
         acts = self.xml.find('actuator')
@@ -71,7 +71,7 @@ class Agent(object):
                 low[i] = clow
         self._low = low
         self._high = high
-        self.action_space = Box(low, high)
+        self.action_space = Box(np.float32(low), np.float32(high))
 
     # @property
     # def observation_space(self):
